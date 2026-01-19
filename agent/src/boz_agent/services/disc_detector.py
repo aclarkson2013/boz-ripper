@@ -69,12 +69,11 @@ class DiscDetector:
         if self.config.drives:
             return self.config.drives
 
-        # Use WMI to find optical drives
-        drives = await asyncio.to_thread(self._wmi_discover_drives)
-        return drives
+        # Use WMI to find optical drives (run directly, not in thread)
+        return self._wmi_discover_drives()
 
     def _wmi_discover_drives(self) -> list[str]:
-        """Use WMI to discover optical drives (runs in thread)."""
+        """Use WMI to discover optical drives."""
         try:
             import wmi
 
@@ -142,22 +141,28 @@ class DiscDetector:
             Dict with disc info if present, None if no disc
         """
         try:
+            import pythoncom
             import wmi
 
-            c = wmi.WMI()
+            # Initialize COM for this thread
+            pythoncom.CoInitialize()
+            try:
+                c = wmi.WMI()
 
-            # Check if there's media in the drive
-            for cdrom in c.Win32_CDROMDrive():
-                if cdrom.Drive == drive:
-                    if cdrom.MediaLoaded:
-                        return {
-                            "drive": drive,
-                            "name": cdrom.VolumeName or "Unknown",
-                            "media_type": cdrom.MediaType or "Unknown",
-                        }
-                    return None
+                # Check if there's media in the drive
+                for cdrom in c.Win32_CDROMDrive():
+                    if cdrom.Drive == drive:
+                        if cdrom.MediaLoaded:
+                            return {
+                                "drive": drive,
+                                "name": cdrom.VolumeName or "Unknown",
+                                "media_type": cdrom.MediaType or "Unknown",
+                            }
+                        return None
 
-            return None
+                return None
+            finally:
+                pythoncom.CoUninitialize()
 
         except ImportError:
             # Fallback: try to access the drive directly
