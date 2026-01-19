@@ -197,6 +197,7 @@ class ServerClient:
         status: str,
         progress: Optional[float] = None,
         error: Optional[str] = None,
+        output_file: Optional[str] = None,
     ) -> None:
         """Update the status of a job.
 
@@ -205,11 +206,13 @@ class ServerClient:
             status: New status (running, completed, failed)
             progress: Progress percentage (0-100)
             error: Error message if failed
+            output_file: Path to output file (if completed)
         """
         payload = {
             "status": status,
             "progress": progress,
             "error": error,
+            "output_file": output_file,
         }
 
         try:
@@ -218,6 +221,104 @@ class ServerClient:
             logger.debug("job_status_updated", job_id=job_id, status=status)
         except Exception as e:
             logger.warning("job_status_update_failed", error=str(e))
+
+    async def get_disc(self, disc_id: str) -> Optional[dict]:
+        """Get disc information by ID.
+
+        Args:
+            disc_id: Disc identifier
+
+        Returns:
+            Disc info dict or None if not found
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/api/discs/{disc_id}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.warning("get_disc_failed", disc_id=disc_id, error=str(e))
+            return None
+
+    async def create_transcode_job(
+        self,
+        input_file: str,
+        output_name: str,
+        preset: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Create a transcode job on the server.
+
+        Args:
+            input_file: Path to input file
+            output_name: Name for output file
+            preset: HandBrake preset to use
+
+        Returns:
+            Created job dict or None if failed
+        """
+        payload = {
+            "job_type": "transcode",
+            "input_file": input_file,
+            "output_name": output_name,
+            "preset": preset,
+        }
+
+        try:
+            client = await self._get_client()
+            response = await client.post("/api/jobs", json=payload)
+            response.raise_for_status()
+            job = response.json()
+            logger.info("transcode_job_created", job_id=job.get("job_id"))
+            return job
+        except Exception as e:
+            logger.error("create_transcode_job_failed", error=str(e))
+            return None
+
+    async def upload_file(self, file_path: Any, name: str) -> bool:
+        """Upload a file to the server.
+
+        Args:
+            file_path: Path to file to upload
+            name: Name/identifier for the file
+
+        Returns:
+            True if successful
+        """
+        from pathlib import Path
+        file_path = Path(file_path)
+
+        if not file_path.exists():
+            logger.error("upload_file_not_found", path=str(file_path))
+            return False
+
+        try:
+            # Use a separate client for file uploads with longer timeout
+            async with httpx.AsyncClient(
+                base_url=self.config.url,
+                timeout=3600,  # 1 hour timeout for large files
+            ) as client:
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path.name, f, "application/octet-stream")}
+                    data = {"name": name}
+
+                    headers = {}
+                    if self.config.api_key:
+                        headers["Authorization"] = f"Bearer {self.config.api_key}"
+
+                    response = await client.post(
+                        "/api/files/upload",
+                        files=files,
+                        data=data,
+                        headers=headers,
+                    )
+                    response.raise_for_status()
+
+            logger.info("file_uploaded", path=str(file_path), name=name)
+            return True
+
+        except Exception as e:
+            logger.error("file_upload_failed", error=str(e))
+            return False
 
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeats to the server."""

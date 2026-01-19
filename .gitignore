@@ -44,6 +44,10 @@ htmlcov/
 .env
 *.local
 
+# Local config files (use .example versions)
+agent/config/config.yaml
+server/.env
+
 # OS
 .DS_Store
 Thumbs.db

@@ -13,6 +13,7 @@ from rich.console import Console
 from boz_agent import __version__
 from boz_agent.core.config import Settings
 from boz_agent.services.disc_detector import DiscDetector
+from boz_agent.services.job_runner import JobRunner
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
 
@@ -39,6 +40,11 @@ class Agent:
             on_disc_inserted=self.handle_disc_inserted,
             on_disc_ejected=self.handle_disc_ejected,
         )
+        self.job_runner = JobRunner(
+            settings=settings,
+            server_client=self.server_client,
+            makemkv=self.makemkv,
+        )
 
     async def start(self) -> None:
         """Start the agent."""
@@ -47,6 +53,8 @@ class Agent:
             "agent_starting",
             agent_name=self.settings.agent.name,
             version=__version__,
+            worker_enabled=self.settings.worker.enabled,
+            gpu_type=self.settings.worker.gpu_type if self.settings.worker.enabled else None,
         )
 
         # Register with server
@@ -56,6 +64,9 @@ class Agent:
         if self.settings.disc_detection.enabled:
             await self.disc_detector.start()
 
+        # Start job runner
+        await self.job_runner.start()
+
         logger.info("agent_started")
 
     async def stop(self) -> None:
@@ -63,6 +74,7 @@ class Agent:
         logger.info("agent_stopping")
         self.running = False
 
+        await self.job_runner.stop()
         await self.disc_detector.stop()
         await self.server_client.unregister()
 

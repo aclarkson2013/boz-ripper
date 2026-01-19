@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from boz_server import __version__
-from boz_server.api import agents_router, discs_router, jobs_router
+from boz_server.api import agents_router, discs_router, files_router, jobs_router
 from boz_server.api.deps import init_services
 from boz_server.core.config import settings
 from boz_server.services.agent_manager import AgentManager
@@ -66,6 +66,7 @@ app.add_middleware(
 # Include routers
 app.include_router(agents_router)
 app.include_router(discs_router)
+app.include_router(files_router)
 app.include_router(jobs_router)
 
 
