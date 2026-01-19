@@ -1,0 +1,45 @@
+# Boz Ripper Docker Compose
+# Run with: docker-compose up -d
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: boz-ripper-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - BOZ_DEBUG=false
+      - BOZ_API_KEY=${BOZ_API_KEY:-}
+      # NAS settings (optional)
+      - BOZ_NAS_ENABLED=${BOZ_NAS_ENABLED:-false}
+      - BOZ_NAS_HOST=${BOZ_NAS_HOST:-}
+      - BOZ_NAS_MOVIE_PATH=${BOZ_NAS_MOVIE_PATH:-Movies}
+      - BOZ_NAS_TV_PATH=${BOZ_NAS_TV_PATH:-TV Shows}
+    volumes:
+      # Temp storage for ripped files
+      - boz-temp:/data/temp
+      # Output storage for transcoded files
+      - boz-output:/data/output
+      # Optional: Mount NAS share
+      # - //NAS_IP/share:/nas:rw
+    networks:
+      - boz-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  boz-temp:
+    driver: local
+  boz-output:
+    driver: local
+
+networks:
+  boz-network:
+    driver: bridge
