@@ -118,7 +118,7 @@ class DiscDetector:
 
     async def _check_drive(self, drive: str) -> None:
         """Check a single drive for disc presence."""
-        disc_info = await asyncio.to_thread(self._get_disc_info, drive)
+        disc_info = self._get_disc_info(drive)
 
         previously_had_disc = drive in self._known_discs
 
@@ -135,34 +135,28 @@ class DiscDetector:
                 await self.on_disc_ejected(drive)
 
     def _get_disc_info(self, drive: str) -> Optional[dict]:
-        """Get information about a disc in the drive (runs in thread).
+        """Get information about a disc in the drive.
 
         Returns:
             Dict with disc info if present, None if no disc
         """
         try:
-            import pythoncom
             import wmi
 
-            # Initialize COM for this thread
-            pythoncom.CoInitialize()
-            try:
-                c = wmi.WMI()
+            c = wmi.WMI()
 
-                # Check if there's media in the drive
-                for cdrom in c.Win32_CDROMDrive():
-                    if cdrom.Drive == drive:
-                        if cdrom.MediaLoaded:
-                            return {
-                                "drive": drive,
-                                "name": cdrom.VolumeName or "Unknown",
-                                "media_type": cdrom.MediaType or "Unknown",
-                            }
-                        return None
+            # Check if there's media in the drive
+            for cdrom in c.Win32_CDROMDrive():
+                if cdrom.Drive == drive:
+                    if cdrom.MediaLoaded:
+                        return {
+                            "drive": drive,
+                            "name": cdrom.VolumeName or "Unknown",
+                            "media_type": cdrom.MediaType or "Unknown",
+                        }
+                    return None
 
-                return None
-            finally:
-                pythoncom.CoUninitialize()
+            return None
 
         except ImportError:
             # Fallback: try to access the drive directly

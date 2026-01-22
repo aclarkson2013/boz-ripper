@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Jobs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Jobs</h1>
+    <div class="d-flex gap-2">
+        <select id="status-filter" class="form-select form-select-sm" style="width: auto;">
+            <option value="">All Statuses</option>
+            <option value="running">Running</option>
+            <option value="assigned">Assigned</option>
+            <option value="pending">Pending</option>
+            <option value="queued">Queued</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+        <button class="btn btn-sm btn-outline-primary" onclick="refreshJobs()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4 col-lg-2">
+        <div class="stat-card stat-primary">
+            <div class="stat-value" id="stat-running">-</div>
+            <div class="stat-label">Running</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="stat-card stat-warning">
+            <div class="stat-value" id="stat-pending">-</div>
+            <div class="stat-label">Pending</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="stat-card stat-success">
+            <div class="stat-value" id="stat-completed">-</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="stat-card stat-danger">
+            <div class="stat-value" id="stat-failed">-</div>
+            <div class="stat-label">Failed</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="stat-card stat-info">
+            <div class="stat-value" id="stat-total">-</div>
+            <div class="stat-label">Total</div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Jobs Section -->
+<div class="card mb-4" id="active-section">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>Active Jobs</h5>
+    </div>
+    <div class="card-body" id="active-jobs-container">
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>No active jobs</p>
+        </div>
+    </div>
+</div>
+
+<!-- Jobs Table -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-list-task me-2"></i>All Jobs</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Name</th>
+                        <th>Progress</th>
+                        <th>Worker</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-tbody">
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Job Detail Modal -->
+<div class="modal fade" id="jobDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Job Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="job-detail-body">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allJobs = [];
+    let refreshInterval = null;
+
+    function getStatusClass(status) {
+        const classes = {
+            running: 'success',
+            assigned: 'warning',
+            pending: 'primary',
+            queued: 'primary',
+            completed: 'info',
+            failed: 'danger',
+            cancelled: 'secondary'
+        };
+        return classes[status] || 'secondary';
+    }
+
+    function renderActiveJobs(jobs) {
+        const container = document.getElementById('active-jobs-container');
+        const section = document.getElementById('active-section');
+        const active = jobs.filter(j => ['running', 'assigned'].includes(j.status));
+
+        if (active.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        container.innerHTML = `<div class="row g-3">${active.map(job => `
+            <div class="col-md-6 col-xl-4">
+                <div class="job-card">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="badge-status status-${job.status}">${job.status}</span>
+                            <span class="badge bg-secondary ms-1">${job.job_type}</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-light" onclick="showJobDetail('${job.job_id}')">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
+                    <div class="fw-medium mb-2 text-truncate" title="${job.output_name || job.input_file || 'Unknown'}">
+                        ${job.output_name || job.input_file || 'Unknown'}
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar bg-${getStatusClass(job.status)}"
+                             style="width: ${job.progress}%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">
+                            ${job.assigned_agent_id ? job.assigned_agent_id.substring(0, 12) : 'Unassigned'}
+                        </small>
+                        <small class="fw-medium">${job.progress.toFixed(1)}%</small>
+                    </div>
+                </div>
+            </div>
+        `).join('')}</div>`;
+    }
+
+    function renderJobsTable(jobs) {
+        const tbody = document.getElementById('jobs-tbody');
+        const filter = document.getElementById('status-filter').value;
+
+        let filtered = jobs;
+        if (filter) {
+            filtered = jobs.filter(j => j.status === filter);
+        }
+
+        // Sort: active first, then by created_at descending
+        filtered.sort((a, b) => {
+            const activeStatuses = ['running', 'assigned', 'pending', 'queued'];
+            const aActive = activeStatuses.includes(a.status);
+            const bActive = activeStatuses.includes(b.status);
+            if (aActive && !bActive) return -1;
+            if (!aActive && bActive) return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No jobs found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(job => `
+            <tr>
+                <td><code>${job.job_id.substring(0, 8)}</code></td>
+                <td><span class="badge bg-secondary">${job.job_type}</span></td>
+                <td><span class="badge-status status-${job.status}">${job.status}</span></td>
+                <td class="text-truncate" style="max-width: 200px;"
+                    title="${job.output_name || job.input_file || '-'}">
+                    ${job.output_name || job.input_file || '-'}
+                </td>
+                <td style="width: 120px;">
+                    ${['running', 'assigned'].includes(job.status) ? `
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height: 6px;">
+                                <div class="progress-bar" style="width: ${job.progress}%"></div>
+                            </div>
+                            <small>${job.progress.toFixed(0)}%</small>
+                        </div>
+                    ` : '-'}
+                </td>
+                <td>
+                    ${job.assigned_agent_id ?
+                        `<code>${job.assigned_agent_id.substring(0, 8)}</code>` : '-'}
+                </td>
+                <td><small>${formatTimeAgo(job.created_at)}</small></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-light" onclick="showJobDetail('${job.job_id}')"
+                                title="View Details">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        ${['pending', 'queued', 'assigned'].includes(job.status) ? `
+                            <button class="btn btn-outline-danger" onclick="cancelJob('${job.job_id}')"
+                                    title="Cancel">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function updateStats(jobs) {
+        const counts = {
+            running: 0, assigned: 0, pending: 0, queued: 0,
+            completed: 0, failed: 0, cancelled: 0
+        };
+
+        jobs.forEach(j => {
+            if (counts[j.status] !== undefined) {
+                counts[j.status]++;
+            }
+        });
+
+        document.getElementById('stat-running').textContent = counts.running + counts.assigned;
+        document.getElementById('stat-pending').textContent = counts.pending + counts.queued;
+        document.getElementById('stat-completed').textContent = counts.completed;
+        document.getElementById('stat-failed').textContent = counts.failed;
+        document.getElementById('stat-total').textContent = jobs.length;
+    }
+
+    async function showJobDetail(jobId) {
+        const modal = new bootstrap.Modal(document.getElementById('jobDetailModal'));
+        const body = document.getElementById('job-detail-body');
+        body.innerHTML = '<div class="text-center py-4">Loading...</div>';
+        modal.show();
+
+        try {
+            const response = await fetch(`/api/jobs/${jobId}`);
+            const job = await response.json();
+
+            body.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="text-muted small">Job ID</label>
+                        <div><code>${job.job_id}</code></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Type</label>
+                        <div><span class="badge bg-secondary">${job.job_type}</span></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Status</label>
+                        <div><span class="badge-status status-${job.status}">${job.status}</span></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Priority</label>
+                        <div>${job.priority}</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="text-muted small">Output Name</label>
+                        <div>${job.output_name || '-'}</div>
+                    </div>
+                    ${job.input_file ? `
+                        <div class="col-12">
+                            <label class="text-muted small">Input File</label>
+                            <div class="text-break">${job.input_file}</div>
+                        </div>
+                    ` : ''}
+                    ${job.output_file ? `
+                        <div class="col-12">
+                            <label class="text-muted small">Output File</label>
+                            <div class="text-break">${job.output_file}</div>
+                        </div>
+                    ` : ''}
+                    ${job.preset ? `
+                        <div class="col-md-6">
+                            <label class="text-muted small">Preset</label>
+                            <div>${job.preset}</div>
+                        </div>
+                    ` : ''}
+                    <div class="col-md-6">
+                        <label class="text-muted small">Assigned Worker</label>
+                        <div>${job.assigned_agent_id || 'Not assigned'}</div>
+                    </div>
+                    ${['running', 'assigned'].includes(job.status) ? `
+                        <div class="col-12">
+                            <label class="text-muted small">Progress</label>
+                            <div class="progress mt-1" style="height: 10px;">
+                                <div class="progress-bar" style="width: ${job.progress}%"></div>
+                            </div>
+                            <small class="text-muted">${job.progress.toFixed(1)}%</small>
+                        </div>
+                    ` : ''}
+                    ${job.error ? `
+                        <div class="col-12">
+                            <label class="text-muted small">Error</label>
+                            <div class="alert alert-danger mb-0">${job.error}</div>
+                        </div>
+                    ` : ''}
+                    <div class="col-md-6">
+                        <label class="text-muted small">Created</label>
+                        <div>${formatTimeAgo(job.created_at)}</div>
+                    </div>
+                    ${job.started_at ? `
+                        <div class="col-md-6">
+                            <label class="text-muted small">Started</label>
+                            <div>${formatTimeAgo(job.started_at)}</div>
+                        </div>
+                    ` : ''}
+                    ${job.completed_at ? `
+                        <div class="col-md-6">
+                            <label class="text-muted small">Completed</label>
+                            <div>${formatTimeAgo(job.completed_at)}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } catch (error) {
+            body.innerHTML = '<div class="alert alert-danger">Failed to load job details</div>';
+        }
+    }
+
+    async function cancelJob(jobId) {
+        if (!confirm('Cancel this job?')) return;
+        try {
+            const response = await fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+            if (response.ok) {
+                refreshJobs();
+            }
+        } catch (error) {
+            console.error('Failed to cancel job:', error);
+        }
+    }
+
+    async function refreshJobs() {
+        try {
+            const response = await fetch('/api/jobs');
+            allJobs = await response.json();
+
+            updateConnectionStatus(true);
+            updateStats(allJobs);
+            renderActiveJobs(allJobs);
+            renderJobsTable(allJobs);
+        } catch (error) {
+            console.error('Failed to refresh jobs:', error);
+            updateConnectionStatus(false);
+        }
+    }
+
+    // Filter change handler
+    document.getElementById('status-filter').addEventListener('change', () => {
+        renderJobsTable(allJobs);
+    });
+
+    // Initial load
+    refreshJobs();
+
+    // Auto-refresh
+    refreshInterval = setInterval(refreshJobs, 3000);
+
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) clearInterval(refreshInterval);
+    });
+</script>
+{% endblock %}

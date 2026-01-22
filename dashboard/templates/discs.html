@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Discs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Detected Discs</h1>
+    <button class="btn btn-sm btn-outline-primary" onclick="refreshDiscs()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+</div>
+
+<!-- Discs Grid -->
+<div class="row g-4" id="discs-container">
+    <div class="col-12">
+        <div class="empty-state">
+            <i class="bi bi-disc"></i>
+            <p>Loading discs...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Disc Detail Modal -->
+<div class="modal fade" id="discDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="disc-modal-title">Disc Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="disc-detail-body">
+                Loading...
+            </div>
+            <div class="modal-footer border-secondary" id="disc-modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allDiscs = [];
+    let refreshInterval = null;
+
+    function renderDiscs(discs) {
+        const container = document.getElementById('discs-container');
+        allDiscs = discs;
+
+        if (!discs || discs.length === 0) {
+            container.innerHTML = `
+                <div class="col-12">
+                    <div class="empty-state">
+                        <i class="bi bi-disc"></i>
+                        <h5>No discs detected</h5>
+                        <p class="text-muted">Insert a DVD or Blu-ray disc into a drive connected to a registered worker</p>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        // Sort by detected_at descending, detected status first
+        discs.sort((a, b) => {
+            if (a.status === 'detected' && b.status !== 'detected') return -1;
+            if (a.status !== 'detected' && b.status === 'detected') return 1;
+            return new Date(b.detected_at) - new Date(a.detected_at);
+        });
+
+        container.innerHTML = discs.map(disc => `
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start gap-3 mb-3">
+                            <div class="disc-icon-large">
+                                <i class="bi bi-disc" style="font-size: 3rem; color: ${disc.disc_type === 'Blu-ray' ? '#3b82f6' : '#f59e0b'};"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-1">${disc.disc_name}</h5>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <span class="badge ${disc.disc_type === 'Blu-ray' ? 'bg-primary' : 'bg-warning text-dark'}">
+                                        ${disc.disc_type}
+                                    </span>
+                                    <span class="badge-status status-${disc.status === 'detected' ? 'pending' : disc.status}">
+                                        ${disc.status}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="row text-muted small">
+                                <div class="col-6">
+                                    <i class="bi bi-hdd me-1"></i>Drive ${disc.drive}
+                                </div>
+                                <div class="col-6">
+                                    <i class="bi bi-film me-1"></i>${disc.titles?.length || 0} titles
+                                </div>
+                            </div>
+                        </div>
+
+                        ${disc.titles && disc.titles.length > 0 ? `
+                            <div class="mb-3">
+                                <h6 class="text-muted small mb-2">MAIN TITLES</h6>
+                                <div class="list-group list-group-flush">
+                                    ${disc.titles.slice(0, 3).map(title => `
+                                        <div class="list-group-item bg-transparent border-secondary px-0 py-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="small">Title ${title.index}</span>
+                                                <span class="text-muted small">
+                                                    ${formatDuration(title.duration_seconds)} -
+                                                    ${formatSize(title.size_bytes)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                    ${disc.titles.length > 3 ? `
+                                        <div class="text-muted small pt-2">
+                                            +${disc.titles.length - 3} more titles
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <div class="d-flex gap-2">
+                            ${disc.status === 'detected' ? `
+                                <button class="btn btn-primary flex-grow-1" onclick="showDiscDetail('${disc.disc_id}')">
+                                    <i class="bi bi-play-fill me-1"></i>Select Titles
+                                </button>
+                            ` : `
+                                <button class="btn btn-outline-secondary flex-grow-1" onclick="showDiscDetail('${disc.disc_id}')">
+                                    <i class="bi bi-eye me-1"></i>View Details
+                                </button>
+                            `}
+                        </div>
+
+                        <div class="text-muted small mt-3">
+                            Detected ${formatTimeAgo(disc.detected_at)} on ${disc.agent_id?.substring(0, 8) || 'Unknown'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function showDiscDetail(discId) {
+        const modal = new bootstrap.Modal(document.getElementById('discDetailModal'));
+        const body = document.getElementById('disc-detail-body');
+        const footer = document.getElementById('disc-modal-footer');
+        const title = document.getElementById('disc-modal-title');
+
+        body.innerHTML = '<div class="text-center py-4">Loading...</div>';
+        footer.innerHTML = '';
+        modal.show();
+
+        try {
+            const response = await fetch(`/api/discs/${discId}`);
+            const disc = await response.json();
+
+            title.textContent = disc.disc_name;
+
+            body.innerHTML = `
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="text-muted small">Disc Type</label>
+                        <div>
+                            <span class="badge ${disc.disc_type === 'Blu-ray' ? 'bg-primary' : 'bg-warning text-dark'}">
+                                ${disc.disc_type}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Status</label>
+                        <div><span class="badge-status status-${disc.status === 'detected' ? 'pending' : disc.status}">${disc.status}</span></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Drive</label>
+                        <div>${disc.drive}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small">Worker</label>
+                        <div><code>${disc.agent_id}</code></div>
+                    </div>
+                </div>
+
+                <h6 class="mb-3">Select Titles to Rip</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" class="form-check-input" id="select-all"
+                                           onchange="toggleAllTitles(this.checked)">
+                                </th>
+                                <th>Title</th>
+                                <th>Duration</th>
+                                <th>Size</th>
+                                <th>Chapters</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(disc.titles || []).map(title => `
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input title-checkbox"
+                                               value="${title.index}"
+                                               ${title.duration_seconds > 600 ? 'checked' : ''}>
+                                    </td>
+                                    <td>
+                                        <strong>Title ${title.index}</strong>
+                                        ${title.name ? `<br><small class="text-muted">${title.name}</small>` : ''}
+                                    </td>
+                                    <td>${formatDuration(title.duration_seconds)}</td>
+                                    <td>${formatSize(title.size_bytes)}</td>
+                                    <td>${title.chapters || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            if (disc.status === 'detected') {
+                footer.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="startRip('${disc.disc_id}')">
+                        <i class="bi bi-play-fill me-1"></i>Start Ripping
+                    </button>
+                `;
+            } else {
+                footer.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                `;
+            }
+        } catch (error) {
+            body.innerHTML = '<div class="alert alert-danger">Failed to load disc details</div>';
+        }
+    }
+
+    function toggleAllTitles(checked) {
+        document.querySelectorAll('.title-checkbox').forEach(cb => {
+            cb.checked = checked;
+        });
+    }
+
+    async function startRip(discId) {
+        const selectedTitles = Array.from(document.querySelectorAll('.title-checkbox:checked'))
+            .map(cb => parseInt(cb.value));
+
+        if (selectedTitles.length === 0) {
+            alert('Please select at least one title to rip');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/discs/${discId}/rip`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title_indices: selectedTitles })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                bootstrap.Modal.getInstance(document.getElementById('discDetailModal')).hide();
+                alert(`Started ripping ${result.jobs_created || selectedTitles.length} title(s)`);
+                refreshDiscs();
+            } else {
+                const error = await response.json();
+                alert(`Failed to start rip: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Failed to start rip:', error);
+            alert('Failed to start rip');
+        }
+    }
+
+    async function refreshDiscs() {
+        try {
+            const response = await fetch('/api/discs');
+            const discs = await response.json();
+
+            updateConnectionStatus(true);
+            renderDiscs(discs);
+        } catch (error) {
+            console.error('Failed to refresh discs:', error);
+            updateConnectionStatus(false);
+        }
+    }
+
+    // Initial load
+    refreshDiscs();
+
+    // Auto-refresh
+    refreshInterval = setInterval(refreshDiscs, 5000);
+
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) clearInterval(refreshInterval);
+    });
+</script>
+{% endblock %}

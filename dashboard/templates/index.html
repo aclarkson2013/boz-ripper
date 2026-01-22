@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <small class="text-muted">Last updated: <span id="last-update">-</span></small>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card stat-primary">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-active-jobs">-</div>
+                    <div class="stat-label">Active Jobs</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-play-circle"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card stat-warning">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-pending-jobs">-</div>
+                    <div class="stat-label">Pending Jobs</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card stat-success">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-workers-online">-</div>
+                    <div class="stat-label">Workers Online</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-pc-display"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card stat-info">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-discs-detected">-</div>
+                    <div class="stat-label">Discs Detected</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-disc-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Active Jobs -->
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>Active Jobs</h5>
+                <a href="{{ url_for('jobs_page') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                <div id="active-jobs-list">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>No active jobs</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workers Status -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-pc-display me-2"></i>Workers</h5>
+                <a href="{{ url_for('agents_page') }}" class="btn btn-sm btn-outline-primary">Manage</a>
+            </div>
+            <div class="card-body" id="workers-list">
+                <div class="empty-state">
+                    <i class="bi bi-pc-display-horizontal"></i>
+                    <p>No workers registered</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <!-- Detected Discs -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-disc-fill me-2"></i>Detected Discs</h5>
+                <a href="{{ url_for('discs_page') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body" id="discs-list">
+                <div class="empty-state">
+                    <i class="bi bi-disc"></i>
+                    <p>No discs detected</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Completions -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-check-circle me-2"></i>Recent Completions</h5>
+            </div>
+            <div class="card-body p-0">
+                <div id="completed-jobs-list">
+                    <div class="empty-state">
+                        <i class="bi bi-clipboard-check"></i>
+                        <p>No completed jobs yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Queue -->
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-ol me-2"></i>Pending Queue</h5>
+                <span class="badge bg-secondary" id="pending-count">0 jobs</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="pending-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Name</th>
+                                <th>Priority</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-jobs-tbody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">No pending jobs</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let refreshInterval = null;
+
+    function renderActiveJobs(jobs) {
+        const container = document.getElementById('active-jobs-list');
+        if (!jobs || jobs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>No active jobs</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = jobs.map(job => `
+            <div class="job-card">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <span class="badge-status status-${job.status}">${job.status}</span>
+                        <span class="badge bg-secondary ms-1">${job.job_type}</span>
+                    </div>
+                    <small class="text-muted">${job.job_id.substring(0, 8)}</small>
+                </div>
+                <div class="fw-medium mb-2">${job.output_name || job.input_file || 'Unknown'}</div>
+                <div class="progress mb-2">
+                    <div class="progress-bar" style="width: ${job.progress}%"></div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <small class="text-muted">
+                        ${job.assigned_agent_id ? `Worker: ${job.assigned_agent_id.substring(0, 8)}` : 'Unassigned'}
+                    </small>
+                    <small class="text-muted">${job.progress.toFixed(1)}%</small>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderWorkers(agents) {
+        const container = document.getElementById('workers-list');
+        if (!agents || agents.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-pc-display-horizontal"></i>
+                    <p>No workers registered</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = agents.map(agent => `
+            <div class="agent-card ${agent.status} mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="fw-medium">${agent.name}</div>
+                        <small class="text-muted">${agent.agent_id.substring(0, 8)}</small>
+                    </div>
+                    <span class="badge-status status-${agent.status}">${agent.status}</span>
+                </div>
+                ${agent.capabilities?.gpu_type ? `
+                    <div class="mt-2">
+                        <span class="gpu-badge">
+                            <i class="bi bi-gpu-card"></i>
+                            ${agent.capabilities.gpu_type.toUpperCase()}
+                        </span>
+                    </div>
+                ` : ''}
+                <small class="text-muted d-block mt-2">
+                    Last seen: ${formatTimeAgo(agent.last_heartbeat)}
+                </small>
+            </div>
+        `).join('');
+    }
+
+    function renderDiscs(discs) {
+        const container = document.getElementById('discs-list');
+        // Filter for detected discs only
+        const detected = discs ? discs.filter(d => d.status === 'detected') : [];
+
+        if (detected.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-disc"></i>
+                    <p>No discs detected</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = detected.slice(0, 3).map(disc => `
+            <div class="disc-card mb-2">
+                <div class="d-flex align-items-start gap-3">
+                    <i class="bi bi-disc disc-icon"></i>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">${disc.disc_name}</div>
+                        <div class="d-flex gap-2 mt-1">
+                            <span class="badge bg-secondary">${disc.disc_type}</span>
+                            <span class="text-muted">${disc.titles?.length || 0} titles</span>
+                        </div>
+                        <small class="text-muted d-block mt-1">
+                            Drive ${disc.drive} on ${disc.agent_id?.substring(0, 8) || 'Unknown'}
+                        </small>
+                    </div>
+                    <a href="{{ url_for('discs_page') }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-play-fill"></i> Rip
+                    </a>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderCompletedJobs(jobs) {
+        const container = document.getElementById('completed-jobs-list');
+        if (!jobs || jobs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-clipboard-check"></i>
+                    <p>No completed jobs yet</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <table class="table table-hover mb-0">
+                <tbody>
+                    ${jobs.slice(0, 5).map(job => `
+                        <tr>
+                            <td>
+                                <div class="fw-medium">${job.output_name || job.output_file || 'Unknown'}</div>
+                                <small class="text-muted">${job.job_type}</small>
+                            </td>
+                            <td class="text-end">
+                                <small class="text-muted">${formatTimeAgo(job.completed_at)}</small>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    function renderPendingJobs(jobs) {
+        const tbody = document.getElementById('pending-jobs-tbody');
+        const countBadge = document.getElementById('pending-count');
+
+        countBadge.textContent = `${jobs?.length || 0} jobs`;
+
+        if (!jobs || jobs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No pending jobs</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = jobs.map(job => `
+            <tr>
+                <td><span class="badge bg-secondary">${job.job_type}</span></td>
+                <td>${job.output_name || job.input_file || 'Unknown'}</td>
+                <td><span class="badge bg-primary">${job.priority}</span></td>
+                <td><small>${formatTimeAgo(job.created_at)}</small></td>
+                <td>
+                    <button class="btn btn-outline-danger btn-action" onclick="cancelJob('${job.job_id}')">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function cancelJob(jobId) {
+        if (!confirm('Cancel this job?')) return;
+        try {
+            const response = await fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
+            if (response.ok) {
+                refreshDashboard();
+            }
+        } catch (error) {
+            console.error('Failed to cancel job:', error);
+        }
+    }
+
+    async function refreshDashboard() {
+        try {
+            const response = await fetch('/api/dashboard');
+            const data = await response.json();
+
+            updateConnectionStatus(data.connected);
+
+            // Update stats
+            document.getElementById('stat-active-jobs').textContent = data.counts?.jobs_active || 0;
+            document.getElementById('stat-pending-jobs').textContent = data.counts?.jobs_pending || 0;
+            document.getElementById('stat-workers-online').textContent =
+                `${data.counts?.agents_online || 0}/${data.counts?.agents_total || 0}`;
+            document.getElementById('stat-discs-detected').textContent = data.counts?.discs_detected || 0;
+
+            // Render sections
+            renderActiveJobs(data.jobs?.active);
+            renderWorkers(data.agents);
+            renderDiscs(data.discs);
+            renderCompletedJobs(data.jobs?.completed);
+            renderPendingJobs(data.jobs?.pending);
+
+            // Update timestamp
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+        } catch (error) {
+            console.error('Failed to refresh dashboard:', error);
+            updateConnectionStatus(false);
+        }
+    }
+
+    // Initial load
+    refreshDashboard();
+
+    // Auto-refresh every 3 seconds
+    refreshInterval = setInterval(refreshDashboard, 3000);
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) clearInterval(refreshInterval);
+    });
+</script>
+{% endblock %}

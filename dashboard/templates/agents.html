@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Workers{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Workers</h1>
+    <button class="btn btn-sm btn-outline-primary" onclick="refreshAgents()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card stat-success">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-online">-</div>
+                    <div class="stat-label">Online</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card stat-warning">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-busy">-</div>
+                    <div class="stat-label">Busy</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-gear"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card stat-danger">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-offline">-</div>
+                    <div class="stat-label">Offline</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-x-circle"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workers Grid -->
+<div class="row g-4" id="agents-container">
+    <div class="col-12">
+        <div class="empty-state">
+            <i class="bi bi-pc-display-horizontal"></i>
+            <p>Loading workers...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Register Worker Info -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Register a Worker</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">
+            To register your machine as a worker, run the Boz Agent on that machine and configure it to connect to this server.
+        </p>
+        <div class="bg-dark p-3 rounded">
+            <code class="text-success">
+                # On the worker machine<br>
+                cd agent<br>
+                python -m boz_agent run --server http://&lt;server-ip&gt;:8000
+            </code>
+        </div>
+        <p class="text-muted mt-3 mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Workers with NVIDIA GPUs will automatically be detected for transcoding jobs.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let refreshInterval = null;
+
+    function renderAgents(agents) {
+        const container = document.getElementById('agents-container');
+
+        // Update stats
+        const online = agents.filter(a => a.status === 'online').length;
+        const busy = agents.filter(a => a.status === 'busy').length;
+        const offline = agents.filter(a => a.status === 'offline').length;
+
+        document.getElementById('stat-online').textContent = online;
+        document.getElementById('stat-busy').textContent = busy;
+        document.getElementById('stat-offline').textContent = offline;
+
+        if (!agents || agents.length === 0) {
+            container.innerHTML = `
+                <div class="col-12">
+                    <div class="empty-state">
+                        <i class="bi bi-pc-display-horizontal"></i>
+                        <p>No workers registered</p>
+                        <small class="text-muted">Run the Boz Agent on a machine to register it as a worker</small>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        // Sort: online/busy first, then offline
+        agents.sort((a, b) => {
+            const order = { online: 0, busy: 1, offline: 2 };
+            return (order[a.status] || 3) - (order[b.status] || 3);
+        });
+
+        container.innerHTML = agents.map(agent => `
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100 agent-card ${agent.status}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">${agent.name}</h5>
+                                <code class="text-muted small">${agent.agent_id}</code>
+                            </div>
+                            <span class="badge-status status-${agent.status}">${agent.status}</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6 class="text-muted small mb-2">CAPABILITIES</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                ${agent.capabilities?.can_rip ? `
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-disc me-1"></i>Ripping
+                                    </span>
+                                ` : ''}
+                                ${agent.capabilities?.can_transcode ? `
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-film me-1"></i>Transcoding
+                                    </span>
+                                ` : ''}
+                                ${agent.capabilities?.gpu_type ? `
+                                    <span class="gpu-badge">
+                                        <i class="bi bi-gpu-card"></i>
+                                        ${agent.capabilities.gpu_type.toUpperCase()}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        ${agent.current_job_id ? `
+                            <div class="mb-3">
+                                <h6 class="text-muted small mb-2">CURRENT JOB</h6>
+                                <code>${agent.current_job_id.substring(0, 12)}...</code>
+                            </div>
+                        ` : ''}
+
+                        <div class="border-top border-secondary pt-3 mt-3">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="text-muted small">Registered</div>
+                                    <div class="small">${formatTimeAgo(agent.registered_at)}</div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-muted small">Last Seen</div>
+                                    <div class="small">${formatTimeAgo(agent.last_heartbeat)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function refreshAgents() {
+        try {
+            const response = await fetch('/api/agents');
+            const agents = await response.json();
+
+            updateConnectionStatus(true);
+            renderAgents(agents);
+        } catch (error) {
+            console.error('Failed to refresh agents:', error);
+            updateConnectionStatus(false);
+        }
+    }
+
+    // Initial load
+    refreshAgents();
+
+    // Auto-refresh
+    refreshInterval = setInterval(refreshAgents, 5000);
+
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) clearInterval(refreshInterval);
+    });
+</script>
+{% endblock %}
