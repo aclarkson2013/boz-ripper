@@ -4,20 +4,20 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">Workers</h1>
-    <button class="btn btn-sm btn-outline-primary" onclick="refreshAgents()">
+    <h1 class="h3 mb-0">Transcoding Workers</h1>
+    <button class="btn btn-sm btn-outline-primary" onclick="refreshWorkers()">
         <i class="bi bi-arrow-clockwise"></i> Refresh
     </button>
 </div>
 
 <!-- Stats -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="stat-card stat-success">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value" id="stat-online">-</div>
-                    <div class="stat-label">Online</div>
+                    <div class="stat-value" id="stat-available">-</div>
+                    <div class="stat-label">Available</div>
                 </div>
                 <div class="stat-icon">
                     <i class="bi bi-check-circle"></i>
@@ -25,7 +25,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="stat-card stat-warning">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
@@ -38,7 +38,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="stat-card stat-danger">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
@@ -51,13 +51,26 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3">
+        <div class="stat-card stat-info">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value" id="stat-gpu">-</div>
+                    <div class="stat-label">GPU Workers</div>
+                </div>
+                <div class="stat-icon">
+                    <i class="bi bi-gpu-card"></i>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Workers Grid -->
-<div class="row g-4" id="agents-container">
+<div class="row g-4" id="workers-container">
     <div class="col-12">
         <div class="empty-state">
-            <i class="bi bi-pc-display-horizontal"></i>
+            <i class="bi bi-gpu-card"></i>
             <p>Loading workers...</p>
         </div>
     </div>
@@ -66,23 +79,41 @@
 <!-- Register Worker Info -->
 <div class="card mt-4">
     <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Register a Worker</h5>
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Register Your RTX 4080 as a Worker</h5>
     </div>
     <div class="card-body">
         <p class="text-muted mb-3">
-            To register your machine as a worker, run the Boz Agent on that machine and configure it to connect to this server.
+            To register your GPU as a transcoding worker, update your agent's <code>config.yaml</code>:
         </p>
-        <div class="bg-dark p-3 rounded">
+        <div class="bg-dark p-3 rounded mb-3">
             <code class="text-success">
-                # On the worker machine<br>
-                cd agent<br>
-                python -m boz_agent run --server http://&lt;server-ip&gt;:8000
+                worker:<br>
+                &nbsp;&nbsp;enabled: true<br>
+                &nbsp;&nbsp;worker_id: "DESKTOP-MAIN-4080"<br>
+                &nbsp;&nbsp;priority: 1<br>
+                &nbsp;&nbsp;max_concurrent_jobs: 2<br>
+                &nbsp;&nbsp;nvenc: true<br>
+                &nbsp;&nbsp;hevc: true<br>
+                &nbsp;&nbsp;av1: true
             </code>
         </div>
-        <p class="text-muted mt-3 mb-0">
+        <p class="text-muted mb-0">
             <i class="bi bi-info-circle me-1"></i>
-            Workers with NVIDIA GPUs will automatically be detected for transcoding jobs.
+            Workers with lower priority numbers are preferred. Your RTX 4080 should be priority 1.
         </p>
+    </div>
+</div>
+
+<!-- Ripping Agents Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-disc me-2"></i>Ripping Agents</h5>
+    </div>
+    <div class="card-body" id="agents-container">
+        <div class="empty-state">
+            <i class="bi bi-disc"></i>
+            <p>Loading agents...</p>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -91,86 +122,115 @@
 <script>
     let refreshInterval = null;
 
-    function renderAgents(agents) {
-        const container = document.getElementById('agents-container');
+    function renderWorkers(workers) {
+        const container = document.getElementById('workers-container');
 
         // Update stats
-        const online = agents.filter(a => a.status === 'online').length;
-        const busy = agents.filter(a => a.status === 'busy').length;
-        const offline = agents.filter(a => a.status === 'offline').length;
+        const available = workers.filter(w => w.status === 'available').length;
+        const busy = workers.filter(w => w.status === 'busy').length;
+        const offline = workers.filter(w => w.status === 'offline').length;
+        const gpu = workers.filter(w => w.capabilities?.nvenc || w.capabilities?.qsv).length;
 
-        document.getElementById('stat-online').textContent = online;
+        document.getElementById('stat-available').textContent = available;
         document.getElementById('stat-busy').textContent = busy;
         document.getElementById('stat-offline').textContent = offline;
+        document.getElementById('stat-gpu').textContent = gpu;
 
-        if (!agents || agents.length === 0) {
+        if (!workers || workers.length === 0) {
             container.innerHTML = `
                 <div class="col-12">
                     <div class="empty-state">
-                        <i class="bi bi-pc-display-horizontal"></i>
+                        <i class="bi bi-gpu-card"></i>
                         <p>No workers registered</p>
-                        <small class="text-muted">Run the Boz Agent on a machine to register it as a worker</small>
+                        <small class="text-muted">Enable worker mode in your agent config to register a worker</small>
                     </div>
                 </div>`;
             return;
         }
 
-        // Sort: online/busy first, then offline
-        agents.sort((a, b) => {
-            const order = { online: 0, busy: 1, offline: 2 };
-            return (order[a.status] || 3) - (order[b.status] || 3);
+        // Sort: available first, then busy, then offline, then by priority
+        workers.sort((a, b) => {
+            const statusOrder = { available: 0, busy: 1, offline: 2 };
+            const statusDiff = (statusOrder[a.status] || 3) - (statusOrder[b.status] || 3);
+            if (statusDiff !== 0) return statusDiff;
+            return a.priority - b.priority;
         });
 
-        container.innerHTML = agents.map(agent => `
+        container.innerHTML = workers.map(worker => `
             <div class="col-md-6 col-xl-4">
-                <div class="card h-100 agent-card ${agent.status}">
+                <div class="card h-100 agent-card ${worker.status}">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div>
-                                <h5 class="card-title mb-1">${agent.name}</h5>
-                                <code class="text-muted small">${agent.agent_id}</code>
+                                <h5 class="card-title mb-1">${worker.worker_id}</h5>
+                                <span class="badge bg-secondary">${worker.worker_type}</span>
+                                <span class="badge bg-primary">Priority ${worker.priority}</span>
                             </div>
-                            <span class="badge-status status-${agent.status}">${agent.status}</span>
+                            <span class="badge-status status-${worker.status}">${worker.status}</span>
                         </div>
 
                         <div class="mb-3">
-                            <h6 class="text-muted small mb-2">CAPABILITIES</h6>
+                            <h6 class="text-muted small mb-2">ENCODER</h6>
                             <div class="d-flex flex-wrap gap-2">
-                                ${agent.capabilities?.can_rip ? `
-                                    <span class="badge bg-primary">
-                                        <i class="bi bi-disc me-1"></i>Ripping
-                                    </span>
-                                ` : ''}
-                                ${agent.capabilities?.can_transcode ? `
-                                    <span class="badge bg-success">
-                                        <i class="bi bi-film me-1"></i>Transcoding
-                                    </span>
-                                ` : ''}
-                                ${agent.capabilities?.gpu_type ? `
+                                ${worker.capabilities?.nvenc ? `
                                     <span class="gpu-badge">
                                         <i class="bi bi-gpu-card"></i>
-                                        ${agent.capabilities.gpu_type.toUpperCase()}
+                                        NVENC Gen ${worker.capabilities.nvenc_generation || '?'}
+                                    </span>
+                                ` : ''}
+                                ${worker.capabilities?.qsv ? `
+                                    <span class="gpu-badge">
+                                        <i class="bi bi-gpu-card"></i>
+                                        QuickSync
+                                    </span>
+                                ` : ''}
+                                ${!worker.capabilities?.nvenc && !worker.capabilities?.qsv ? `
+                                    <span class="badge bg-secondary">
+                                        CPU (${worker.capabilities?.cpu_threads || '?'} threads)
                                     </span>
                                 ` : ''}
                             </div>
                         </div>
 
-                        ${agent.current_job_id ? `
+                        <div class="mb-3">
+                            <h6 class="text-muted small mb-2">CODECS</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-success">H.264</span>
+                                ${worker.capabilities?.hevc ? '<span class="badge bg-success">HEVC</span>' : '<span class="badge bg-secondary">HEVC</span>'}
+                                ${worker.capabilities?.av1 ? '<span class="badge bg-success">AV1</span>' : '<span class="badge bg-secondary">AV1</span>'}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6 class="text-muted small mb-2">CAPACITY</h6>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height: 8px;">
+                                    <div class="progress-bar" style="width: ${((worker.current_jobs?.length || 0) / (worker.capabilities?.max_concurrent || 1)) * 100}%"></div>
+                                </div>
+                                <span class="small">${worker.current_jobs?.length || 0}/${worker.capabilities?.max_concurrent || 1}</span>
+                            </div>
+                        </div>
+
+                        ${worker.current_jobs?.length > 0 ? `
                             <div class="mb-3">
-                                <h6 class="text-muted small mb-2">CURRENT JOB</h6>
-                                <code>${agent.current_job_id.substring(0, 12)}...</code>
+                                <h6 class="text-muted small mb-2">CURRENT JOBS</h6>
+                                ${worker.current_jobs.map(j => `<code class="small d-block">${j.substring(0, 12)}...</code>`).join('')}
                             </div>
                         ` : ''}
 
                         <div class="border-top border-secondary pt-3 mt-3">
                             <div class="row text-center">
-                                <div class="col-6">
-                                    <div class="text-muted small">Registered</div>
-                                    <div class="small">${formatTimeAgo(agent.registered_at)}</div>
+                                <div class="col-4">
+                                    <div class="text-muted small">Completed</div>
+                                    <div class="small fw-medium">${worker.total_jobs_completed || 0}</div>
                                 </div>
-                                <div class="col-6">
+                                <div class="col-4">
+                                    <div class="text-muted small">Avg Time</div>
+                                    <div class="small fw-medium">${worker.avg_transcode_time_seconds ? formatDuration(Math.round(worker.avg_transcode_time_seconds)) : '-'}</div>
+                                </div>
+                                <div class="col-4">
                                     <div class="text-muted small">Last Seen</div>
-                                    <div class="small">${formatTimeAgo(agent.last_heartbeat)}</div>
+                                    <div class="small">${formatTimeAgo(worker.last_heartbeat)}</div>
                                 </div>
                             </div>
                         </div>
@@ -180,24 +240,59 @@
         `).join('');
     }
 
-    async function refreshAgents() {
+    function renderAgents(agents) {
+        const container = document.getElementById('agents-container');
+
+        if (!agents || agents.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="bi bi-disc"></i>
+                    <p>No ripping agents registered</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="row g-3">
+                ${agents.map(agent => `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="d-flex align-items-center gap-3 p-3 rounded" style="background: rgba(99, 102, 241, 0.1);">
+                            <i class="bi bi-disc-fill" style="font-size: 2rem; color: var(--boz-primary);"></i>
+                            <div>
+                                <div class="fw-medium">${agent.name}</div>
+                                <small class="text-muted">${agent.agent_id.substring(0, 12)}</small>
+                                <span class="badge-status status-${agent.status} ms-2">${agent.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+    }
+
+    async function refreshWorkers() {
         try {
-            const response = await fetch('/api/agents');
-            const agents = await response.json();
+            const [workersRes, agentsRes] = await Promise.all([
+                fetch('/api/workers'),
+                fetch('/api/agents')
+            ]);
+
+            const workers = await workersRes.json();
+            const agents = await agentsRes.json();
 
             updateConnectionStatus(true);
+            renderWorkers(workers);
             renderAgents(agents);
         } catch (error) {
-            console.error('Failed to refresh agents:', error);
+            console.error('Failed to refresh workers:', error);
             updateConnectionStatus(false);
         }
     }
 
     // Initial load
-    refreshAgents();
+    refreshWorkers();
 
     // Auto-refresh
-    refreshInterval = setInterval(refreshAgents, 5000);
+    refreshInterval = setInterval(refreshWorkers, 5000);
 
     window.addEventListener('beforeunload', () => {
         if (refreshInterval) clearInterval(refreshInterval);

@@ -38,12 +38,35 @@ makemkv:
 worker:
   # Enable local transcoding worker
   enabled: false
+  # Worker ID (auto-generated if not set, e.g., "DESKTOP-MAIN-4080")
+  worker_id: null
+  # Priority 1-99 (lower = higher priority, 1 is highest)
+  priority: 1
   # Number of concurrent transcoding jobs
-  max_jobs: 1
-  # GPU acceleration (nvidia, amd, intel, none)
-  gpu_type: "none"
+  max_concurrent_jobs: 2
+
+  # GPU settings (auto-detected if not set)
+  # NVIDIA NVENC support
+  nvenc: false
+  nvenc_device: 0
+  # Intel QuickSync support
+  qsv: false
+  # Codec support
+  hevc: true
+  av1: false
+
   # Output directory for transcoded files
   output_dir: "C:\\BozRipper\\output"
+
+# Example configuration for RTX 4080:
+# worker:
+#   enabled: true
+#   worker_id: "DESKTOP-MAIN-4080"
+#   priority: 1
+#   max_concurrent_jobs: 2
+#   nvenc: true
+#   hevc: true
+#   av1: true
 
 handbrake:
   # Path to HandBrake CLI executable

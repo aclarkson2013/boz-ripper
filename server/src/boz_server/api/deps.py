@@ -8,23 +8,27 @@ from boz_server.core.config import settings
 from boz_server.services.agent_manager import AgentManager
 from boz_server.services.job_queue import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
+from boz_server.services.worker_manager import WorkerManager
 
 # Global service instances
 _agent_manager: AgentManager | None = None
 _job_queue: JobQueue | None = None
 _nas_organizer: NASOrganizer | None = None
+_worker_manager: WorkerManager | None = None
 
 
 def init_services(
     agent_manager: AgentManager,
     job_queue: JobQueue,
     nas_organizer: NASOrganizer,
+    worker_manager: WorkerManager,
 ) -> None:
     """Initialize service instances."""
-    global _agent_manager, _job_queue, _nas_organizer
+    global _agent_manager, _job_queue, _nas_organizer, _worker_manager
     _agent_manager = agent_manager
     _job_queue = job_queue
     _nas_organizer = nas_organizer
+    _worker_manager = worker_manager
 
 
 def get_agent_manager() -> AgentManager:
@@ -46,6 +50,13 @@ def get_nas_organizer() -> NASOrganizer:
     if _nas_organizer is None:
         raise RuntimeError("Services not initialized")
     return _nas_organizer
+
+
+def get_worker_manager() -> WorkerManager:
+    """Get the worker manager instance."""
+    if _worker_manager is None:
+        raise RuntimeError("Services not initialized")
+    return _worker_manager
 
 
 async def verify_api_key(
@@ -71,4 +82,5 @@ async def verify_api_key(
 AgentManagerDep = Annotated[AgentManager, Depends(get_agent_manager)]
 JobQueueDep = Annotated[JobQueue, Depends(get_job_queue)]
 NASOrganizerDep = Annotated[NASOrganizer, Depends(get_nas_organizer)]
+WorkerManagerDep = Annotated[WorkerManager, Depends(get_worker_manager)]
 ApiKeyDep = Annotated[None, Depends(verify_api_key)]

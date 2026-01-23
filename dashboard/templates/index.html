@@ -40,11 +40,11 @@
         <div class="stat-card stat-success">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value" id="stat-workers-online">-</div>
-                    <div class="stat-label">Workers Online</div>
+                    <div class="stat-value" id="stat-workers-available">-</div>
+                    <div class="stat-label">Workers Available</div>
                 </div>
                 <div class="stat-icon">
-                    <i class="bi bi-pc-display"></i>
+                    <i class="bi bi-gpu-card"></i>
                 </div>
             </div>
         </div>
@@ -206,36 +206,47 @@
         `).join('');
     }
 
-    function renderWorkers(agents) {
+    function renderWorkers(workers) {
         const container = document.getElementById('workers-list');
-        if (!agents || agents.length === 0) {
+        if (!workers || workers.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <i class="bi bi-pc-display-horizontal"></i>
+                    <i class="bi bi-gpu-card"></i>
                     <p>No workers registered</p>
                 </div>`;
             return;
         }
 
-        container.innerHTML = agents.map(agent => `
-            <div class="agent-card ${agent.status} mb-2">
+        // Sort by priority
+        workers.sort((a, b) => a.priority - b.priority);
+
+        container.innerHTML = workers.map(worker => `
+            <div class="agent-card ${worker.status} mb-2">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="fw-medium">${agent.name}</div>
-                        <small class="text-muted">${agent.agent_id.substring(0, 8)}</small>
+                        <div class="fw-medium">${worker.worker_id}</div>
+                        <small class="text-muted">Priority ${worker.priority} - ${worker.worker_type}</small>
                     </div>
-                    <span class="badge-status status-${agent.status}">${agent.status}</span>
+                    <span class="badge-status status-${worker.status}">${worker.status}</span>
                 </div>
-                ${agent.capabilities?.gpu_type ? `
+                ${worker.capabilities?.nvenc || worker.capabilities?.qsv ? `
                     <div class="mt-2">
                         <span class="gpu-badge">
                             <i class="bi bi-gpu-card"></i>
-                            ${agent.capabilities.gpu_type.toUpperCase()}
+                            ${worker.capabilities.nvenc ? 'NVENC' : ''}${worker.capabilities.qsv ? 'QSV' : ''}
+                            ${worker.capabilities.nvenc_generation ? `(Gen ${worker.capabilities.nvenc_generation})` : ''}
                         </span>
+                        ${worker.capabilities.hevc ? '<span class="badge bg-secondary ms-1">HEVC</span>' : ''}
+                        ${worker.capabilities.av1 ? '<span class="badge bg-secondary ms-1">AV1</span>' : ''}
                     </div>
-                ` : ''}
+                ` : `
+                    <div class="mt-2">
+                        <span class="badge bg-secondary">CPU (${worker.capabilities?.cpu_threads || '?'} threads)</span>
+                    </div>
+                `}
                 <small class="text-muted d-block mt-2">
-                    Last seen: ${formatTimeAgo(agent.last_heartbeat)}
+                    Jobs: ${worker.current_jobs?.length || 0}/${worker.capabilities?.max_concurrent || 1} |
+                    Last seen: ${formatTimeAgo(worker.last_heartbeat)}
                 </small>
             </div>
         `).join('');
@@ -354,13 +365,13 @@
             // Update stats
             document.getElementById('stat-active-jobs').textContent = data.counts?.jobs_active || 0;
             document.getElementById('stat-pending-jobs').textContent = data.counts?.jobs_pending || 0;
-            document.getElementById('stat-workers-online').textContent =
-                `${data.counts?.agents_online || 0}/${data.counts?.agents_total || 0}`;
+            document.getElementById('stat-workers-available').textContent =
+                `${data.counts?.workers_available || 0}/${data.counts?.workers_total || 0}`;
             document.getElementById('stat-discs-detected').textContent = data.counts?.discs_detected || 0;
 
             // Render sections
             renderActiveJobs(data.jobs?.active);
-            renderWorkers(data.agents);
+            renderWorkers(data.workers);
             renderDiscs(data.discs);
             renderCompletedJobs(data.jobs?.completed);
             renderPendingJobs(data.jobs?.pending);

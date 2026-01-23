@@ -138,6 +138,7 @@ def api_dashboard():
     """Get all dashboard data in one call."""
     health = api_request("GET", "/health") or {}
     agents = api_request("GET", "/api/agents") or []
+    workers = api_request("GET", "/api/workers") or []
     jobs = api_request("GET", "/api/jobs") or []
     discs = api_request("GET", "/api/discs") or []
     stats = api_request("GET", "/api/jobs/stats") or {}
@@ -156,6 +157,7 @@ def api_dashboard():
         "connected": bool(health),
         "server": health,
         "agents": agents,
+        "workers": workers,
         "discs": discs,
         "stats": stats,
         "jobs": {
@@ -168,6 +170,9 @@ def api_dashboard():
             "agents_online": len([a for a in agents if a.get("status") == "online"]),
             "agents_busy": len([a for a in agents if a.get("status") == "busy"]),
             "agents_total": len(agents),
+            "workers_available": len([w for w in workers if w.get("status") == "available"]),
+            "workers_busy": len([w for w in workers if w.get("status") == "busy"]),
+            "workers_total": len(workers),
             "jobs_active": len(active_jobs),
             "jobs_pending": len(pending_jobs),
             "jobs_completed": len(completed_jobs),
@@ -182,6 +187,27 @@ def api_agents():
     """Proxy to agents API."""
     agents = api_request("GET", "/api/agents")
     return jsonify(agents or [])
+
+
+@app.route("/api/workers")
+def api_workers():
+    """Proxy to workers API."""
+    workers = api_request("GET", "/api/workers")
+    return jsonify(workers or [])
+
+
+@app.route("/api/workers/<worker_id>")
+def api_worker_detail(worker_id: str):
+    """Get single worker details."""
+    worker = api_request("GET", f"/api/workers/{worker_id}")
+    return jsonify(worker or {})
+
+
+@app.route("/api/workers/stats")
+def api_worker_stats():
+    """Get worker statistics."""
+    stats = api_request("GET", "/api/workers/stats")
+    return jsonify(stats or {})
 
 
 @app.route("/api/agents/<agent_id>")

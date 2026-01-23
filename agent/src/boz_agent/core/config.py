@@ -44,8 +44,17 @@ class WorkerConfig(BaseModel):
     """Local worker/transcoding settings."""
 
     enabled: bool = False
-    max_jobs: int = 1
-    gpu_type: str = "none"
+    worker_id: Optional[str] = None  # Auto-generated if not set
+    priority: int = 1  # 1-99, lower = higher priority
+    max_concurrent_jobs: int = 2
+
+    # GPU settings
+    nvenc: bool = False  # Auto-detect if not set
+    nvenc_device: int = 0
+    qsv: bool = False
+    hevc: bool = True
+    av1: bool = False
+
     output_dir: str = r"C:\BozRipper\output"
 
 

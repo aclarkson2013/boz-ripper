@@ -44,5 +44,10 @@ class Settings(BaseSettings):
     agent_timeout_seconds: int = 120  # Mark offline after this
     heartbeat_interval: int = 30
 
+    # Worker settings
+    worker_timeout_seconds: int = 90  # Mark worker offline after this
+    worker_assignment_strategy: str = "priority"  # priority, round_robin, load_balance
+    worker_auto_failover: bool = True  # Auto-reassign jobs if worker goes offline
+
 
 settings = Settings()

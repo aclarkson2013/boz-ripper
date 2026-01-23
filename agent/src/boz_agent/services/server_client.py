@@ -7,7 +7,7 @@ from uuid import uuid4
 import httpx
 import structlog
 
-from boz_agent.core.config import AgentConfig, ServerConfig
+from boz_agent.core.config import AgentConfig, ServerConfig, WorkerConfig
 
 logger = structlog.get_logger()
 
@@ -342,3 +342,229 @@ class ServerClient:
             logger.debug("heartbeat_sent")
         except Exception as e:
             logger.warning("heartbeat_failed", error=str(e))
+
+    # Worker registration methods
+
+    async def register_worker(
+        self,
+        worker_config: WorkerConfig,
+        agent_name: str,
+    ) -> Optional[str]:
+        """Register this agent as a transcoding worker.
+
+        Args:
+            worker_config: Worker configuration
+            agent_name: Name for the worker
+
+        Returns:
+            Worker ID if successful
+        """
+        import socket
+        import os
+
+        # Generate worker ID if not set
+        worker_id = worker_config.worker_id
+        if not worker_id:
+            hostname = socket.gethostname()
+            # Include GPU info in worker ID if available
+            if worker_config.nvenc:
+                worker_id = f"{hostname}-NVENC"
+            elif worker_config.qsv:
+                worker_id = f"{hostname}-QSV"
+            else:
+                worker_id = f"{hostname}-CPU"
+
+        # Detect CPU threads
+        cpu_threads = os.cpu_count() or 4
+
+        payload = {
+            "worker_id": worker_id,
+            "worker_type": "agent",
+            "hostname": socket.gethostname(),
+            "capabilities": {
+                "nvenc": worker_config.nvenc,
+                "nvenc_generation": 8 if worker_config.nvenc else 0,  # Assume RTX 40 series
+                "qsv": worker_config.qsv,
+                "vaapi": False,
+                "hevc": worker_config.hevc,
+                "av1": worker_config.av1,
+                "cpu_threads": cpu_threads,
+                "max_concurrent": worker_config.max_concurrent_jobs,
+            },
+            "priority": worker_config.priority,
+        }
+
+        try:
+            client = await self._get_client()
+            response = await client.post("/api/workers/register", json=payload)
+            response.raise_for_status()
+
+            data = response.json()
+            registered_id = data.get("worker_id", worker_id)
+
+            logger.info(
+                "worker_registered",
+                worker_id=registered_id,
+                priority=worker_config.priority,
+                nvenc=worker_config.nvenc,
+            )
+
+            # Start worker heartbeat
+            self._worker_id = registered_id
+            self._worker_heartbeat_task = asyncio.create_task(self._worker_heartbeat_loop())
+
+            return registered_id
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "worker_registration_failed",
+                status_code=e.response.status_code,
+                detail=e.response.text,
+            )
+            return None
+        except httpx.RequestError as e:
+            logger.warning(
+                "worker_registration_server_unreachable",
+                url=self.config.url,
+                error=str(e),
+            )
+            return None
+
+    async def worker_heartbeat(
+        self,
+        status: str = "available",
+        current_jobs: Optional[list[str]] = None,
+        cpu_usage: Optional[float] = None,
+        gpu_usage: Optional[float] = None,
+    ) -> bool:
+        """Send worker heartbeat.
+
+        Args:
+            status: Worker status (available, busy, offline)
+            current_jobs: List of current job IDs
+            cpu_usage: CPU usage percentage
+            gpu_usage: GPU usage percentage
+
+        Returns:
+            True if successful
+        """
+        if not hasattr(self, '_worker_id') or not self._worker_id:
+            return False
+
+        payload = {
+            "status": status,
+            "current_jobs": current_jobs or [],
+            "cpu_usage": cpu_usage,
+            "gpu_usage": gpu_usage,
+        }
+
+        try:
+            client = await self._get_client()
+            await client.post(
+                f"/api/workers/{self._worker_id}/heartbeat",
+                json=payload,
+            )
+            logger.debug("worker_heartbeat_sent")
+            return True
+        except Exception as e:
+            logger.warning("worker_heartbeat_failed", error=str(e))
+            return False
+
+    async def request_worker_assignment(
+        self,
+        disc_type: str = "dvd",
+        file_size_mb: int = 0,
+    ) -> Optional[dict]:
+        """Request a worker assignment for transcoding.
+
+        Args:
+            disc_type: Type of disc (dvd, bluray)
+            file_size_mb: Size of file to transcode
+
+        Returns:
+            Assignment dict with worker details and preset
+        """
+        if not self._agent_id:
+            return None
+
+        payload = {
+            "agent_id": self._agent_id,
+            "disc_type": disc_type,
+            "file_size_mb": file_size_mb,
+        }
+
+        try:
+            client = await self._get_client()
+            response = await client.post("/api/workers/assign", json=payload)
+            response.raise_for_status()
+
+            assignment = response.json()
+            logger.info(
+                "worker_assignment_received",
+                worker=assignment.get("assigned_worker"),
+                mode=assignment.get("mode"),
+                preset=assignment.get("handbrake_preset"),
+            )
+            return assignment
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 503:
+                logger.warning("no_workers_available")
+            else:
+                logger.error("worker_assignment_failed", error=str(e))
+            return None
+        except Exception as e:
+            logger.error("worker_assignment_error", error=str(e))
+            return None
+
+    async def complete_worker_job(
+        self,
+        job_id: str,
+        duration_seconds: float = 0,
+        success: bool = True,
+        error: Optional[str] = None,
+    ) -> bool:
+        """Mark a transcode job as complete.
+
+        Args:
+            job_id: Job identifier
+            duration_seconds: How long transcoding took
+            success: Whether job succeeded
+            error: Error message if failed
+
+        Returns:
+            True if successful
+        """
+        if not hasattr(self, '_worker_id') or not self._worker_id:
+            return False
+
+        payload = {
+            "job_id": job_id,
+            "duration_seconds": duration_seconds,
+            "success": success,
+            "error": error,
+        }
+
+        try:
+            client = await self._get_client()
+            response = await client.post(
+                f"/api/workers/{self._worker_id}/jobs/complete",
+                json=payload,
+            )
+            response.raise_for_status()
+            logger.info("worker_job_completed", job_id=job_id, success=success)
+            return True
+        except Exception as e:
+            logger.error("worker_job_complete_failed", error=str(e))
+            return False
+
+    async def _worker_heartbeat_loop(self) -> None:
+        """Send periodic worker heartbeats."""
+        while True:
+            try:
+                await asyncio.sleep(30)
+                await self.worker_heartbeat()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("worker_heartbeat_loop_error", error=str(e))

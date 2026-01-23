@@ -66,16 +66,16 @@ Extracted from PRD v2.1 (January 18, 2026)
 
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
-| W1 | Register with server on startup | P0 | [ ] |
-| W2 | Report capabilities (NVENC, QSV, CPU, etc.) | P0 | [ ] |
-| W3 | Poll server for transcode jobs | P0 | [ ] |
+| W1 | Register with server on startup | P0 | [x] |
+| W2 | Report capabilities (NVENC, QSV, CPU, etc.) | P0 | [x] |
+| W3 | Poll server for transcode jobs | P0 | [~] |
 | W4 | Download raw MKV from server (if remote worker) | P0 | [ ] |
 | W5 | Transcode with HandBrake using assigned preset | P0 | [ ] |
 | W6 | Upload final file to server (if remote worker) | P0 | [ ] |
 | W7 | Report progress to server | P1 | [ ] |
-| W8 | Send heartbeat every 30 seconds | P0 | [ ] |
+| W8 | Send heartbeat every 30 seconds | P0 | [x] |
 | W9 | Handle job cancellation gracefully | P1 | [ ] |
-| W10 | Support concurrent jobs (configurable max) | P1 | [ ] |
+| W10 | Support concurrent jobs (configurable max) | P1 | [x] |
 
 ---
 
