@@ -56,6 +56,19 @@
     </div>
 </div>
 
+<!-- Awaiting Approval Section -->
+<div class="card mb-4" id="approval-section" style="display: none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-hourglass-split me-2"></i>Awaiting Approval
+            <span class="badge bg-warning ms-2" id="approval-count">0</span>
+        </h5>
+    </div>
+    <div class="card-body" id="approval-jobs-container">
+        <!-- Jobs awaiting approval rendered here -->
+    </div>
+</div>
+
 <!-- Active Jobs Section -->
 <div class="card mb-4" id="active-section">
     <div class="card-header">
@@ -113,12 +126,37 @@
         </div>
     </div>
 </div>
+
+<!-- Transcode Approval Modal -->
+<div class="modal fade" id="approvalModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title"><i class="bi bi-play-circle me-2"></i>Configure Transcode</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="approval-modal-body">
+                Loading...
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="approve-btn" onclick="submitApproval()">
+                    <i class="bi bi-play-fill me-1"></i>Start Transcoding
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let allJobs = [];
     let refreshInterval = null;
+    let pendingApprovalJobs = [];
+    let availableWorkers = [];
+    let availablePresets = [];
+    let currentApprovalJobId = null;
 
     function getStatusClass(status) {
         const classes = {
@@ -372,9 +410,264 @@
             updateStats(allJobs);
             renderActiveJobs(allJobs);
             renderJobsTable(allJobs);
+
+            // Also load approval data
+            await loadApprovalData();
         } catch (error) {
             console.error('Failed to refresh jobs:', error);
             updateConnectionStatus(false);
+        }
+    }
+
+    async function loadApprovalData() {
+        try {
+            const [jobsRes, workersRes, presetsRes] = await Promise.all([
+                fetch('/api/jobs/awaiting-approval'),
+                fetch('/api/workers'),
+                fetch('/api/jobs/presets')
+            ]);
+
+            pendingApprovalJobs = await jobsRes.json();
+            const workersData = await workersRes.json();
+            availableWorkers = (workersData || []).filter(w => w.status !== 'offline');
+            const presetsData = await presetsRes.json();
+            availablePresets = presetsData.presets || [];
+
+            renderApprovalSection();
+        } catch (error) {
+            console.error('Failed to load approval data:', error);
+        }
+    }
+
+    function renderApprovalSection() {
+        const section = document.getElementById('approval-section');
+        const container = document.getElementById('approval-jobs-container');
+        const countBadge = document.getElementById('approval-count');
+
+        countBadge.textContent = pendingApprovalJobs.length;
+
+        if (pendingApprovalJobs.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        container.innerHTML = `<div class="row g-3">${pendingApprovalJobs.map(job => `
+            <div class="col-md-6 col-xl-4">
+                <div class="job-card" style="border-left: 3px solid var(--bs-warning);">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="badge bg-warning text-dark">awaiting approval</span>
+                            <span class="badge bg-secondary ms-1">transcode</span>
+                        </div>
+                    </div>
+                    <div class="fw-medium mb-2 text-truncate" title="${job.output_name || 'Unknown'}">
+                        ${job.output_name || job.source_disc_name || 'Unknown'}
+                    </div>
+                    ${job.source_disc_name ? `
+                        <div class="small text-muted mb-2">
+                            <i class="bi bi-disc me-1"></i>Source: ${job.source_disc_name}
+                        </div>
+                    ` : ''}
+                    <div class="small text-muted mb-3">
+                        <i class="bi bi-file-earmark me-1"></i>
+                        ${job.input_file_size ? formatSize(job.input_file_size) : 'Unknown size'}
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100" onclick="showApprovalModal('${job.job_id}')">
+                        <i class="bi bi-gear me-1"></i>Configure & Start
+                    </button>
+                </div>
+            </div>
+        `).join('')}</div>`;
+    }
+
+    function showApprovalModal(jobId) {
+        const job = pendingApprovalJobs.find(j => j.job_id === jobId);
+        if (!job) return;
+
+        currentApprovalJobId = jobId;
+
+        const modal = new bootstrap.Modal(document.getElementById('approvalModal'));
+        const body = document.getElementById('approval-modal-body');
+
+        // Separate GPU and CPU workers
+        const gpuWorkers = availableWorkers.filter(w => w.capabilities?.nvenc || w.capabilities?.qsv);
+        const cpuWorkers = availableWorkers.filter(w => !w.capabilities?.nvenc && !w.capabilities?.qsv);
+
+        body.innerHTML = `
+            <div class="row g-3 mb-4">
+                <div class="col-12">
+                    <label class="text-muted small">Output Name</label>
+                    <div class="fw-medium">${job.output_name || 'Unknown'}</div>
+                </div>
+                ${job.source_disc_name ? `
+                    <div class="col-md-6">
+                        <label class="text-muted small">Source Disc</label>
+                        <div>${job.source_disc_name}</div>
+                    </div>
+                ` : ''}
+                <div class="col-md-6">
+                    <label class="text-muted small">Input File Size</label>
+                    <div>${job.input_file_size ? formatSize(job.input_file_size) : 'Unknown'}</div>
+                </div>
+            </div>
+
+            <h6 class="mb-3"><i class="bi bi-gpu-card me-2"></i>Select Worker</h6>
+            <div class="mb-4">
+                ${gpuWorkers.length > 0 ? `
+                    <div class="mb-2 text-success small fw-medium">GPU Workers (Recommended)</div>
+                    ${gpuWorkers.map((w, i) => `
+                        <div class="form-check mb-2 p-3 border border-secondary rounded ${i === 0 ? 'border-success' : ''}">
+                            <input class="form-check-input" type="radio" name="worker"
+                                   id="worker-${w.worker_id}" value="${w.worker_id}"
+                                   ${i === 0 ? 'checked' : ''}>
+                            <label class="form-check-label d-flex justify-content-between w-100" for="worker-${w.worker_id}">
+                                <span>
+                                    <strong>${w.worker_id}</strong>
+                                    <span class="badge bg-success ms-2">
+                                        ${w.capabilities?.nvenc ? 'NVENC' : ''}${w.capabilities?.qsv ? 'QuickSync' : ''}
+                                    </span>
+                                    ${w.capabilities?.hevc ? '<span class="badge bg-info ms-1">HEVC</span>' : ''}
+                                    ${w.capabilities?.av1 ? '<span class="badge bg-info ms-1">AV1</span>' : ''}
+                                </span>
+                                <span class="badge bg-${w.status === 'available' ? 'success' : 'warning'}">${w.status}</span>
+                            </label>
+                        </div>
+                    `).join('')}
+                ` : ''}
+
+                ${cpuWorkers.length > 0 ? `
+                    <div class="mb-2 mt-3 text-muted small fw-medium">CPU Workers (Slower)</div>
+                    ${cpuWorkers.map((w, i) => `
+                        <div class="form-check mb-2 p-3 border border-secondary rounded">
+                            <input class="form-check-input" type="radio" name="worker"
+                                   id="worker-${w.worker_id}" value="${w.worker_id}"
+                                   ${gpuWorkers.length === 0 && i === 0 ? 'checked' : ''}>
+                            <label class="form-check-label d-flex justify-content-between w-100" for="worker-${w.worker_id}">
+                                <span>
+                                    <strong>${w.worker_id}</strong>
+                                    <span class="badge bg-secondary ms-2">${w.capabilities?.cpu_threads || '?'} threads</span>
+                                </span>
+                                <span class="badge bg-${w.status === 'available' ? 'success' : 'warning'}">${w.status}</span>
+                            </label>
+                        </div>
+                    `).join('')}
+                ` : ''}
+
+                ${availableWorkers.length === 0 ? `
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        No workers available. Please ensure at least one worker is online.
+                    </div>
+                ` : ''}
+            </div>
+
+            <h6 class="mb-3"><i class="bi bi-sliders me-2"></i>Select Preset</h6>
+            <div class="mb-3">
+                <select class="form-select" id="preset-select" onchange="updatePresetInfo()">
+                    <option value="">Select a preset...</option>
+                    ${availablePresets.map((p, i) => `
+                        <option value="${p.id}" data-requires="${p.requires || ''}" ${i === 0 ? 'selected' : ''}>${p.name}</option>
+                    `).join('')}
+                </select>
+                <div id="preset-warning" class="text-warning small mt-2" style="display: none;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <span id="preset-warning-text"></span>
+                </div>
+            </div>
+        `;
+
+        // Enable/disable approve button
+        document.getElementById('approve-btn').disabled = availableWorkers.length === 0;
+
+        // Check preset compatibility
+        setTimeout(updatePresetInfo, 100);
+
+        modal.show();
+    }
+
+    function updatePresetInfo() {
+        const select = document.getElementById('preset-select');
+        if (!select) return;
+
+        const option = select.options[select.selectedIndex];
+        if (!option) return;
+
+        const requires = option.dataset.requires;
+        const warning = document.getElementById('preset-warning');
+        const warningText = document.getElementById('preset-warning-text');
+
+        if (!requires || !warning) {
+            if (warning) warning.style.display = 'none';
+            return;
+        }
+
+        const selectedWorker = document.querySelector('input[name="worker"]:checked');
+        if (!selectedWorker) {
+            warning.style.display = 'none';
+            return;
+        }
+
+        const worker = availableWorkers.find(w => w.worker_id === selectedWorker.value);
+        if (!worker) return;
+
+        let hasCapability = false;
+        if (requires === 'nvenc') hasCapability = worker.capabilities?.nvenc;
+        if (requires === 'qsv') hasCapability = worker.capabilities?.qsv;
+
+        if (!hasCapability) {
+            warning.style.display = 'block';
+            warningText.textContent = `Selected worker does not support ${requires.toUpperCase()}. Choose a different worker or preset.`;
+        } else {
+            warning.style.display = 'none';
+        }
+    }
+
+    async function submitApproval() {
+        if (!currentApprovalJobId) return;
+
+        const selectedWorker = document.querySelector('input[name="worker"]:checked');
+        const presetSelect = document.getElementById('preset-select');
+
+        if (!selectedWorker) {
+            alert('Please select a worker');
+            return;
+        }
+
+        if (!presetSelect.value) {
+            alert('Please select a preset');
+            return;
+        }
+
+        const approveBtn = document.getElementById('approve-btn');
+        approveBtn.disabled = true;
+        approveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting...';
+
+        try {
+            const response = await fetch(`/api/jobs/${currentApprovalJobId}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    worker_id: selectedWorker.value,
+                    preset: presetSelect.value
+                })
+            });
+
+            if (response.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('approvalModal')).hide();
+                currentApprovalJobId = null;
+                refreshJobs();
+            } else {
+                const error = await response.json();
+                alert(`Failed to approve job: ${error.detail || error.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Failed to approve job:', error);
+            alert('Failed to approve job');
+        } finally {
+            approveBtn.disabled = false;
+            approveBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Start Transcoding';
         }
     }
 

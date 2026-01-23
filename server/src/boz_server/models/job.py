@@ -38,6 +38,18 @@ class JobCreate(BaseModel):
     preset: Optional[str] = None
     priority: int = 0  # Higher = more urgent
 
+    # Approval workflow fields
+    requires_approval: bool = False
+    source_disc_name: Optional[str] = None
+    input_file_size: Optional[int] = None
+
+
+class JobApprovalRequest(BaseModel):
+    """Request to approve a pending transcode job."""
+
+    worker_id: str
+    preset: str
+
 
 class JobUpdate(BaseModel):
     """Request to update job status."""
@@ -69,6 +81,11 @@ class Job(BaseModel):
     # Assignment
     assigned_agent_id: Optional[str] = None
     assigned_at: Optional[datetime] = None
+
+    # Approval workflow
+    requires_approval: bool = False
+    source_disc_name: Optional[str] = None
+    input_file_size: Optional[int] = None
 
     # Progress tracking
     progress: float = 0.0

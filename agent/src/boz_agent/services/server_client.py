@@ -245,6 +245,9 @@ class ServerClient:
         input_file: str,
         output_name: str,
         preset: Optional[str] = None,
+        requires_approval: bool = True,
+        source_disc_name: Optional[str] = None,
+        input_file_size: Optional[int] = None,
     ) -> Optional[dict]:
         """Create a transcode job on the server.
 
@@ -252,6 +255,9 @@ class ServerClient:
             input_file: Path to input file
             output_name: Name for output file
             preset: HandBrake preset to use
+            requires_approval: Whether job needs user approval before starting
+            source_disc_name: Name of the source disc for display
+            input_file_size: Size of input file in bytes
 
         Returns:
             Created job dict or None if failed
@@ -261,6 +267,9 @@ class ServerClient:
             "input_file": input_file,
             "output_name": output_name,
             "preset": preset,
+            "requires_approval": requires_approval,
+            "source_disc_name": source_disc_name,
+            "input_file_size": input_file_size,
         }
 
         try:
@@ -268,7 +277,7 @@ class ServerClient:
             response = await client.post("/api/jobs", json=payload)
             response.raise_for_status()
             job = response.json()
-            logger.info("transcode_job_created", job_id=job.get("job_id"))
+            logger.info("transcode_job_created", job_id=job.get("job_id"), requires_approval=requires_approval)
             return job
         except Exception as e:
             logger.error("create_transcode_job_failed", error=str(e))

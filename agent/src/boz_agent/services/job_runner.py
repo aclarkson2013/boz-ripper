@@ -158,18 +158,23 @@ class JobRunner:
             job_id, "completed", progress=100, output_file=str(output_file)
         )
 
-        # If worker is enabled, automatically queue transcode and assign to self
-        if self.worker and self.settings.worker.enabled:
-            logger.info("queuing_transcode", input_file=str(output_file))
-            transcode_job = await self.server_client.create_transcode_job(
-                input_file=str(output_file),
-                output_name=output_name,
-                preset=self.settings.handbrake.preset,
-            )
-            # Assign to ourselves so we pick it up
-            if transcode_job and transcode_job.get("job_id"):
-                await self.server_client.assign_job_to_self(transcode_job["job_id"])
-                logger.info("transcode_job_assigned", job_id=transcode_job["job_id"])
+        # Queue transcode job for user approval (no auto-assignment)
+        logger.info("queuing_transcode_for_approval", input_file=str(output_file))
+
+        # Get file size for display in dashboard
+        import os
+        file_size = os.path.getsize(output_file) if output_file.exists() else None
+
+        transcode_job = await self.server_client.create_transcode_job(
+            input_file=str(output_file),
+            output_name=output_name,
+            preset=None,  # User will select via dashboard
+            requires_approval=True,
+            source_disc_name=disc.get("disc_name", output_name),
+            input_file_size=file_size,
+        )
+        if transcode_job:
+            logger.info("transcode_job_queued_for_approval", job_id=transcode_job.get("job_id"))
 
     async def _execute_transcode_job(self, job: dict) -> None:
         """Execute a transcode job using HandBrake."""

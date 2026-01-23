@@ -242,6 +242,30 @@ def api_cancel_job(job_id: str):
     return jsonify(result or {"error": "Failed to cancel job"})
 
 
+@app.route("/api/jobs/awaiting-approval")
+def api_jobs_awaiting_approval():
+    """Get jobs awaiting user approval."""
+    jobs = api_request("GET", "/api/jobs/awaiting-approval")
+    return jsonify(jobs or [])
+
+
+@app.route("/api/jobs/<job_id>/approve", methods=["POST"])
+def api_approve_job(job_id: str):
+    """Approve a transcode job with worker and preset selection."""
+    data = request.get_json() or {}
+    result = api_request("POST", f"/api/jobs/{job_id}/approve", json=data)
+    if result and result.get("status") == "ok":
+        return jsonify(result)
+    return jsonify(result or {"error": "Failed to approve job"}), 400
+
+
+@app.route("/api/jobs/presets")
+def api_job_presets():
+    """Get available transcoding presets."""
+    presets = api_request("GET", "/api/jobs/presets")
+    return jsonify(presets or {"presets": []})
+
+
 @app.route("/api/discs")
 def api_discs():
     """Proxy to discs API."""
