@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep
+from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, WorkerManagerDep
 from boz_server.models.job import Job, JobApprovalRequest, JobCreate, JobStatus, JobUpdate
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -163,6 +163,7 @@ async def approve_job(
     job_id: str,
     request: JobApprovalRequest,
     job_queue: JobQueueDep,
+    worker_manager: WorkerManagerDep,
     agent_manager: AgentManagerDep,
     _: ApiKeyDep,
 ) -> dict:
@@ -177,22 +178,29 @@ async def approve_job(
     if job.status != JobStatus.PENDING:
         raise HTTPException(status_code=400, detail="Job is not pending")
 
-    # Validate agent exists
-    agent = agent_manager.get(request.worker_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Worker/agent not found")
+    # Validate worker exists
+    worker = worker_manager.get(request.worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
 
-    # Approve and assign
-    approved_job = job_queue.approve_job(job_id, request.worker_id, request.preset)
+    # Get the agent_id to assign the job to
+    # Workers from agents have an agent_id, standalone workers use worker_id
+    agent_id = worker.agent_id or request.worker_id
+
+    # Approve and assign to the agent
+    approved_job = job_queue.approve_job(job_id, agent_id, request.preset)
     if not approved_job:
         raise HTTPException(status_code=400, detail="Failed to approve job")
 
-    # Mark agent as having a job
-    agent_manager.assign_job(request.worker_id, job_id)
+    # Mark agent as having a job (if the agent exists)
+    agent = agent_manager.get(agent_id)
+    if agent:
+        agent_manager.assign_job(agent_id, job_id)
 
     return {
         "status": "ok",
         "job_id": job_id,
         "worker_id": request.worker_id,
+        "agent_id": agent_id,
         "preset": request.preset,
     }

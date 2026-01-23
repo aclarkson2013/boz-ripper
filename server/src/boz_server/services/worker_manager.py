@@ -59,6 +59,7 @@ class WorkerManager:
         hostname: str,
         capabilities: Optional[WorkerCapabilities] = None,
         priority: int = 50,
+        agent_id: Optional[str] = None,
     ) -> Worker:
         """Register a new worker or update existing."""
         if worker_id in self._workers:
@@ -72,6 +73,8 @@ class WorkerManager:
                 worker.capabilities = capabilities
             if priority:
                 worker.priority = priority
+            if agent_id:
+                worker.agent_id = agent_id
             logger.info(f"Worker reconnected: {worker_id} ({hostname})")
         else:
             # Create new worker
@@ -81,11 +84,12 @@ class WorkerManager:
                 hostname=hostname,
                 capabilities=capabilities or WorkerCapabilities(),
                 priority=priority,
+                agent_id=agent_id,
             )
             self._workers[worker_id] = worker
             logger.info(
                 f"Worker registered: {worker_id} ({hostname}) - "
-                f"Priority {priority}, {worker.get_encoder_name()}"
+                f"Priority {priority}, {worker.get_encoder_name()}, agent={agent_id}"
             )
 
         return worker

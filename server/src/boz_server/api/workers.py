@@ -63,6 +63,7 @@ async def register_worker(
         hostname=request.hostname,
         capabilities=request.capabilities,
         priority=request.priority,
+        agent_id=request.agent_id,
     )
     return worker
 

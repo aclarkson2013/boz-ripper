@@ -51,6 +51,7 @@ class WorkerRegistration(BaseModel):
     hostname: str
     capabilities: WorkerCapabilities = Field(default_factory=WorkerCapabilities)
     priority: int = 50  # 1-99, lower = higher priority
+    agent_id: Optional[str] = None  # Associated agent ID for job assignment
 
 
 class WorkerHeartbeat(BaseModel):
@@ -69,6 +70,7 @@ class Worker(BaseModel):
     worker_type: WorkerType = WorkerType.AGENT
     hostname: str
     capabilities: WorkerCapabilities = Field(default_factory=WorkerCapabilities)
+    agent_id: Optional[str] = None  # Associated agent ID for job assignment
 
     # Priority and status
     priority: int = 50  # 1-99, lower = higher priority

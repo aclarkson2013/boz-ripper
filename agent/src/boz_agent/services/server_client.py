@@ -427,6 +427,7 @@ class ServerClient:
                 "max_concurrent": worker_config.max_concurrent_jobs,
             },
             "priority": worker_config.priority,
+            "agent_id": self._agent_id,  # Link worker to agent for job assignment
         }
 
         try:
