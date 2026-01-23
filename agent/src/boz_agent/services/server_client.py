@@ -291,7 +291,7 @@ class ServerClient:
             client = await self._get_client()
             response = await client.post(
                 f"/api/jobs/{job_id}/assign",
-                json={"agent_id": self._agent_id}
+                params={"agent_id": self._agent_id}  # Send as query param, not JSON body
             )
             response.raise_for_status()
             logger.info("job_assigned_to_self", job_id=job_id)
