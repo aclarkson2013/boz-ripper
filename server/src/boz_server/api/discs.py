@@ -3,9 +3,15 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep
 from boz_server.models.disc import Disc, DiscDetected, DiscEjected, DiscType
+
+
+class RipRequest(BaseModel):
+    """Request body for starting a rip."""
+    title_indices: list[int] | None = None
 
 router = APIRouter(prefix="/api/discs", tags=["discs"])
 
@@ -94,13 +100,16 @@ async def get_disc(
 async def start_rip(
     disc_id: str,
     job_queue: JobQueueDep,
-    title_indices: list[int] | None = None,
+    request: RipRequest | None = None,
     _: ApiKeyDep = None,
 ) -> dict:
     """Start ripping selected titles from a disc."""
     disc = job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
+
+    # Get title indices from request body
+    title_indices = request.title_indices if request else None
 
     # Determine which titles to rip
     if title_indices:
