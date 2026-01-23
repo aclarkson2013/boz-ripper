@@ -189,15 +189,19 @@ class MakeMKVService:
         # Stream output for progress updates
         output_lines = []
         last_progress_log = 0
+        lines_received = 0
         while True:
             line = await process.stdout.readline()
             if not line:
+                logger.debug("makemkv_stdout_closed", lines_received=lines_received)
                 break
+
+            lines_received += 1
 
             line_str = line.decode("utf-8", errors="replace").strip()
             output_lines.append(line_str)
 
-            # Log output for debugging (not every line to avoid spam)
+            # Log all output for debugging
             if line_str.startswith("PRGV:"):
                 progress = self._parse_progress(line_str)
                 if progress is not None:
@@ -211,6 +215,9 @@ class MakeMKVService:
                 logger.debug("makemkv_msg", msg=line_str)
             elif line_str.startswith("PRGT:") or line_str.startswith("PRGC:"):
                 logger.debug("makemkv_status", status=line_str)
+            elif line_str:
+                # Log any other non-empty output
+                logger.debug("makemkv_output", line=line_str)
 
         await process.wait()
         logger.debug("makemkv_finished", returncode=process.returncode)
