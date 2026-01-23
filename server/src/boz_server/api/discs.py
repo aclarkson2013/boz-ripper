@@ -122,11 +122,13 @@ async def start_rip(
     if not titles_to_rip:
         raise HTTPException(status_code=400, detail="No titles selected for ripping")
 
-    # Create rip jobs
+    # Create rip jobs and assign to the agent with the disc
     jobs = []
     for title in titles_to_rip:
         output_name = f"{disc.disc_name}_t{title.index:02d}"
         job = job_queue.create_rip_job(disc, title, output_name)
+        # Auto-assign to the agent that reported this disc
+        job_queue.assign_job(job.job_id, disc.agent_id)
         jobs.append(job)
 
     disc.status = "ripping"
