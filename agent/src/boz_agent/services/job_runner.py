@@ -43,7 +43,13 @@ class JobRunner:
 
         if self.worker:
             await self.worker.start()
-            logger.info("job_runner_started", worker_enabled=True, gpu=self.settings.worker.gpu_type)
+            # Derive gpu_type from config flags
+            gpu_type = "cpu"
+            if self.settings.worker.nvenc:
+                gpu_type = "nvenc"
+            elif self.settings.worker.qsv:
+                gpu_type = "qsv"
+            logger.info("job_runner_started", worker_enabled=True, gpu=gpu_type)
         else:
             logger.info("job_runner_started", worker_enabled=False)
 
