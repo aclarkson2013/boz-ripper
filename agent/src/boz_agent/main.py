@@ -13,6 +13,7 @@ from rich.console import Console
 from boz_agent import __version__
 from boz_agent.core.config import Settings
 from boz_agent.services.disc_detector import DiscDetector
+from boz_agent.services.gpu_detector import detect_gpu
 from boz_agent.services.job_runner import JobRunner
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
@@ -31,6 +32,7 @@ class Agent:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.running = False
+        self._worker_heartbeat_task: Optional[asyncio.Task] = None
 
         # Initialize services
         self.server_client = ServerClient(settings.server)
@@ -54,11 +56,15 @@ class Agent:
             agent_name=self.settings.agent.name,
             version=__version__,
             worker_enabled=self.settings.worker.enabled,
-            gpu_type=self.settings.worker.gpu_type if self.settings.worker.enabled else None,
         )
 
-        # Register with server
+        # Register with server as agent
         await self.server_client.register(self.settings.agent)
+
+        # Register as worker if enabled
+        if self.settings.worker.enabled:
+            await self._register_worker()
+            self._worker_heartbeat_task = asyncio.create_task(self._worker_heartbeat_loop())
 
         # Start disc detection
         if self.settings.disc_detection.enabled:
@@ -69,10 +75,81 @@ class Agent:
 
         logger.info("agent_started")
 
+    async def _register_worker(self) -> None:
+        """Register this agent as a transcoding worker."""
+        import socket
+
+        worker_config = self.settings.worker
+
+        # Auto-detect GPU if not explicitly configured
+        gpu_info = detect_gpu()
+
+        # Build capabilities
+        capabilities = {
+            "nvenc": worker_config.nvenc or gpu_info.get("nvenc", False),
+            "nvenc_generation": gpu_info.get("nvenc_generation", 0),
+            "qsv": worker_config.qsv or gpu_info.get("qsv", False),
+            "hevc": worker_config.hevc,
+            "av1": worker_config.av1,
+            "cpu_threads": gpu_info.get("cpu_threads", 4),
+            "max_concurrent": worker_config.max_concurrent_jobs,
+        }
+
+        # Generate worker ID if not set
+        worker_id = worker_config.worker_id
+        if not worker_id:
+            hostname = socket.gethostname()
+            if capabilities["nvenc"]:
+                worker_id = f"{hostname}-NVENC"
+            elif capabilities["qsv"]:
+                worker_id = f"{hostname}-QSV"
+            else:
+                worker_id = f"{hostname}-CPU"
+
+        logger.info(
+            "registering_worker",
+            worker_id=worker_id,
+            priority=worker_config.priority,
+            capabilities=capabilities,
+        )
+
+        success = await self.server_client.register_worker(
+            worker_id=worker_id,
+            worker_type="agent",
+            capabilities=capabilities,
+            priority=worker_config.priority,
+        )
+
+        if success:
+            logger.info("worker_registered", worker_id=worker_id)
+            self._worker_id = worker_id
+        else:
+            logger.error("worker_registration_failed", worker_id=worker_id)
+            self._worker_id = None
+
+    async def _worker_heartbeat_loop(self) -> None:
+        """Send periodic heartbeats to server."""
+        while self.running and hasattr(self, "_worker_id") and self._worker_id:
+            try:
+                await self.server_client.worker_heartbeat(self._worker_id)
+                logger.debug("worker_heartbeat_sent", worker_id=self._worker_id)
+            except Exception as e:
+                logger.warning("worker_heartbeat_failed", error=str(e))
+
+            await asyncio.sleep(30)  # 30 second heartbeat interval
+
     async def stop(self) -> None:
         """Stop the agent gracefully."""
         logger.info("agent_stopping")
         self.running = False
+
+        # Stop worker heartbeat
+        if self._worker_heartbeat_task:
+            self._worker_heartbeat_task.cancel()
+            try:
+                await self._worker_heartbeat_task
+            except asyncio.CancelledError:
+                pass
 
         await self.job_runner.stop()
         await self.disc_detector.stop()
