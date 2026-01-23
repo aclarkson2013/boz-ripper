@@ -198,13 +198,20 @@ class JobRunner:
             preset=preset,
         )
 
+        # Derive gpu_type from config flags
+        gpu_type = "cpu"
+        if self.settings.worker.nvenc:
+            gpu_type = "nvenc"
+        elif self.settings.worker.qsv:
+            gpu_type = "qsv"
+
         # Create transcode job for worker
         transcode_job = TranscodeJob(
             job_id=job_id,
             input_file=input_file,
             output_file=output_file,
             preset=preset,
-            gpu_type=self.settings.worker.gpu_type,
+            gpu_type=gpu_type,
         )
 
         # Submit to worker and wait for completion

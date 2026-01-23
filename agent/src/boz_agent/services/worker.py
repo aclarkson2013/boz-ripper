@@ -181,13 +181,19 @@ class WorkerService:
         ]
 
         # Add GPU acceleration if configured
-        gpu_type = job.gpu_type or self.worker_config.gpu_type
+        # Derive gpu_type from config flags if not set on job
+        gpu_type = job.gpu_type
+        if not gpu_type or gpu_type == "none":
+            if self.worker_config.nvenc:
+                gpu_type = "nvenc"
+            elif self.worker_config.qsv:
+                gpu_type = "qsv"
+            else:
+                gpu_type = "cpu"
 
-        if gpu_type == "nvidia":
+        if gpu_type == "nvenc":
             cmd.extend(["--encoder", "nvenc_h265"])
-        elif gpu_type == "amd":
-            cmd.extend(["--encoder", "vce_h265"])
-        elif gpu_type == "intel":
+        elif gpu_type == "qsv":
             cmd.extend(["--encoder", "qsv_h265"])
 
         return cmd
