@@ -150,13 +150,10 @@ class MakeMKVService:
         output_dir = output_dir or self._temp_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Clean up existing MKV files to avoid overwrite prompts
-        for old_mkv in output_dir.glob("*.mkv"):
-            logger.debug("removing_old_mkv", file=str(old_mkv))
-            try:
-                old_mkv.unlink()
-            except Exception as e:
-                logger.warning("failed_to_remove_mkv", file=str(old_mkv), error=str(e))
+        # NOTE: Don't clean up existing MKV files here!
+        # Previous versions deleted all .mkv files to avoid overwrite prompts,
+        # but this would delete files that were ripped but not yet transcoded.
+        # MakeMKV will handle overwrites itself or use unique filenames.
 
         disc_index = await self._get_disc_index(drive)
 

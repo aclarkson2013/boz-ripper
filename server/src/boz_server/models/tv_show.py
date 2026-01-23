@@ -29,6 +29,7 @@ class TVSeason(BaseModel):
 
     # Multi-disc tracking
     disc_ids: list[str] = Field(default_factory=list)  # All discs for this season
+    last_disc_name: Optional[str] = None  # Track last disc name to detect re-insertions
 
     @property
     def next_episode_number(self) -> int:

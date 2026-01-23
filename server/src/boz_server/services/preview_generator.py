@@ -105,8 +105,31 @@ class PreviewGenerator:
                 # Get or create season tracker
                 tv_season = self.get_or_create_season(show_name, season_number)
                 disc.tv_season_id = tv_season.season_id
-                tv_season.disc_ids.append(disc.disc_id)
-                logger.info(f"Season tracker: {tv_season.season_id} (last_episode: {tv_season.last_episode_assigned})")
+
+                # Check if this is a re-insertion vs. a continuation disc
+                # Re-insertion: same disc_name as last processed disc (user ejected and re-inserted)
+                # Continuation: different disc_name (new disc for multi-disc season)
+                if tv_season.last_disc_name and tv_season.last_disc_name == disc.disc_name:
+                    logger.warning(f"Disc '{disc.disc_name}' was already processed for season {tv_season.season_id}")
+                    logger.warning(f"This appears to be a re-insertion - resetting episode counter to 1")
+                    # Reset episode counter for re-insertion
+                    tv_season.last_episode_assigned = 0
+                    # Clear disc_ids for this disc to start fresh
+                    tv_season.disc_ids = []
+                else:
+                    # New disc for this season or first disc
+                    logger.info(f"Processing disc '{disc.disc_name}' for season {tv_season.season_id}")
+                    if tv_season.last_disc_name:
+                        logger.info(f"Continuation from previous disc '{tv_season.last_disc_name}', starting from episode {tv_season.next_episode_number}")
+                    else:
+                        logger.info(f"First disc for season, starting from episode 1")
+
+                # Update tracking
+                tv_season.last_disc_name = disc.disc_name
+                if disc.disc_id not in tv_season.disc_ids:
+                    tv_season.disc_ids.append(disc.disc_id)
+
+                logger.info(f"Season tracker: {tv_season.season_id} (last_episode: {tv_season.last_episode_assigned}, disc_count: {len(tv_season.disc_ids)}, last_disc: {tv_season.last_disc_name})")
 
                 # Step 2: Query TheTVDB for episode metadata (if client available)
                 logger.info(f"STEP 2: TheTVDB Metadata Lookup")
