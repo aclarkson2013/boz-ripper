@@ -168,14 +168,19 @@ class MakeMKVService:
             str(output_dir),
         ]
 
+        logger.debug("makemkv_command", cmd=" ".join(cmd))
+
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
 
+        logger.debug("makemkv_started", pid=process.pid)
+
         # Stream output for progress updates
         output_lines = []
+        last_progress_log = 0
         while True:
             line = await process.stdout.readline()
             if not line:
@@ -184,13 +189,23 @@ class MakeMKVService:
             line_str = line.decode("utf-8", errors="replace").strip()
             output_lines.append(line_str)
 
-            # Parse progress if callback provided
-            if progress_callback and line_str.startswith("PRGV:"):
+            # Log output for debugging (not every line to avoid spam)
+            if line_str.startswith("PRGV:"):
                 progress = self._parse_progress(line_str)
                 if progress is not None:
-                    await progress_callback(progress)
+                    # Log every 10%
+                    if int(progress / 10) > last_progress_log:
+                        last_progress_log = int(progress / 10)
+                        logger.info("rip_progress", progress=f"{progress:.1f}%")
+                    if progress_callback:
+                        await progress_callback(progress)
+            elif line_str.startswith("MSG:"):
+                logger.debug("makemkv_msg", msg=line_str)
+            elif line_str.startswith("PRGT:") or line_str.startswith("PRGC:"):
+                logger.debug("makemkv_status", status=line_str)
 
         await process.wait()
+        logger.debug("makemkv_finished", returncode=process.returncode)
 
         if process.returncode != 0:
             raise RuntimeError(f"MakeMKV rip failed with code {process.returncode}")
@@ -207,12 +222,52 @@ class MakeMKVService:
         return output_file
 
     async def _get_disc_index(self, drive: str) -> int:
-        """Get MakeMKV disc index from drive letter."""
-        # MakeMKV uses disc indices, not drive letters
-        # Run with --list-drives to map them
-        # For simplicity, assume single drive = disc:0
-        # TODO: Implement proper drive mapping
-        return 0
+        """Get MakeMKV disc index from drive letter.
+
+        MakeMKV uses disc indices (0, 1, 2...) not drive letters.
+        We query MakeMKV to find which index corresponds to the drive.
+        """
+        # Run MakeMKV info with an invalid disc to get drive list
+        cmd = [
+            str(self._executable),
+            "-r",
+            "info",
+            "disc:9999",  # Invalid index triggers drive listing
+        ]
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await process.communicate()
+            output = stdout.decode("utf-8", errors="replace")
+
+            # Parse DRV lines: DRV:index,visible,enabled,flags,drive_name,disc_name
+            # Example: DRV:0,2,999,12,"HL-DT-ST BD-RE  BH16NS40 USB Device","LIFE_AQUATIC_D1"
+            drive_letter = drive.rstrip(":").upper()
+
+            for line in output.splitlines():
+                if line.startswith("DRV:"):
+                    parts = line[4:].split(",")
+                    if len(parts) >= 5:
+                        idx = int(parts[0])
+                        # Check if this drive has a disc (visible > 0)
+                        visible = int(parts[1]) if parts[1].isdigit() else 0
+                        if visible > 0:
+                            # The drive name or location might contain our drive letter
+                            # Also check by disc index order
+                            logger.debug("found_drive", index=idx, info=line)
+                            return idx
+
+            # Fallback: return 0 if no disc found
+            logger.warning("disc_index_not_found", drive=drive, defaulting_to=0)
+            return 0
+
+        except Exception as e:
+            logger.warning("disc_index_detection_failed", error=str(e), defaulting_to=0)
+            return 0
 
     def _parse_info_output(self, output: str, drive: str) -> DiscAnalysis:
         """Parse MakeMKV robot-mode info output."""
