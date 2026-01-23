@@ -54,6 +54,20 @@ async def get_jobs_awaiting_approval(
     return job_queue.get_jobs_awaiting_approval()
 
 
+@router.get("/upload-errors", response_model=list[Job])
+async def get_jobs_with_upload_errors(
+    job_queue: JobQueueDep,
+) -> list[Job]:
+    """Get completed jobs that have upload errors."""
+    jobs = job_queue.get_all_jobs()
+    return [
+        j for j in jobs
+        if j.status == JobStatus.COMPLETED
+        and j.error
+        and "upload" in j.error.lower()
+    ]
+
+
 @router.get("/presets")
 async def get_available_presets() -> dict:
     """Get available transcoding presets."""

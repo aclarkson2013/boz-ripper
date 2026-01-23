@@ -249,6 +249,13 @@ def api_jobs_awaiting_approval():
     return jsonify(jobs or [])
 
 
+@app.route("/api/jobs/upload-errors")
+def api_jobs_upload_errors():
+    """Get jobs with upload errors."""
+    jobs = api_request("GET", "/api/jobs/upload-errors")
+    return jsonify(jobs or [])
+
+
 @app.route("/api/jobs/<job_id>/approve", methods=["POST"])
 def api_approve_job(job_id: str):
     """Approve a transcode job with worker and preset selection."""

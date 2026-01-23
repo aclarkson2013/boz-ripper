@@ -107,6 +107,11 @@ class Agent:
         # Analyze disc with MakeMKV
         analysis = await self.makemkv.analyze_disc(drive)
 
+        # If MakeMKV couldn't get disc name, use Windows volume name
+        if analysis.disc_name == "Unknown" and disc_info.get("name"):
+            analysis.disc_name = disc_info["name"]
+            logger.info("using_volume_name", disc_name=analysis.disc_name)
+
         # Report to server
         await self.server_client.report_disc(drive, analysis)
 

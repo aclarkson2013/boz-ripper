@@ -242,23 +242,44 @@ class JobRunner:
         if final_status and final_status.status == "completed":
             logger.info("transcode_completed", job_id=job_id, output_file=str(output_file))
 
-            # Upload to server
-            await self._upload_file(output_file, output_name)
+            # Try to upload to server (don't fail job if upload fails)
+            upload_success = await self._upload_file(output_file, output_name)
 
-            await self.server_client.update_job_status(
-                job_id, "completed", progress=100, output_file=str(output_file)
-            )
+            if upload_success:
+                await self.server_client.update_job_status(
+                    job_id, "completed", progress=100, output_file=str(output_file)
+                )
+            else:
+                # Mark as completed but with upload error note
+                await self.server_client.update_job_status(
+                    job_id, "completed", progress=100, output_file=str(output_file),
+                    error="Upload failed - file available locally for manual retry"
+                )
         else:
             error = final_status.error if final_status else "Unknown error"
             await self.server_client.update_job_status(job_id, "failed", error=error)
 
-    async def _upload_file(self, file_path: Path, name: str) -> None:
-        """Upload a completed file to the server."""
+    async def _upload_file(self, file_path: Path, name: str, retries: int = 3) -> bool:
+        """Upload a completed file to the server with retries.
+
+        Returns:
+            True if upload succeeded, False otherwise
+        """
         logger.info("uploading_file", file=str(file_path), name=name)
 
-        try:
-            await self.server_client.upload_file(file_path, name)
-            logger.info("upload_completed", file=str(file_path))
-        except Exception as e:
-            logger.error("upload_failed", error=str(e))
-            raise
+        for attempt in range(1, retries + 1):
+            try:
+                success = await self.server_client.upload_file(file_path, name)
+                if success:
+                    logger.info("upload_completed", file=str(file_path))
+                    return True
+                else:
+                    logger.warning("upload_returned_false", file=str(file_path), attempt=attempt)
+            except Exception as e:
+                logger.error("upload_failed", file=str(file_path), error=str(e), attempt=attempt)
+                if attempt < retries:
+                    logger.info("upload_retrying", file=str(file_path), next_attempt=attempt + 1)
+                    await asyncio.sleep(5 * attempt)  # Exponential backoff
+
+        logger.error("upload_all_retries_failed", file=str(file_path), retries=retries)
+        return False

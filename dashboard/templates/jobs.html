@@ -69,6 +69,19 @@
     </div>
 </div>
 
+<!-- Upload Errors Section -->
+<div class="card mb-4" id="upload-errors-section" style="display: none;">
+    <div class="card-header d-flex justify-content-between align-items-center bg-danger bg-opacity-25">
+        <h5 class="mb-0">
+            <i class="bi bi-exclamation-triangle me-2"></i>Upload Errors
+            <span class="badge bg-danger ms-2" id="upload-errors-count">0</span>
+        </h5>
+    </div>
+    <div class="card-body" id="upload-errors-container">
+        <!-- Jobs with upload errors rendered here -->
+    </div>
+</div>
+
 <!-- Active Jobs Section -->
 <div class="card mb-4" id="active-section">
     <div class="card-header">
@@ -154,6 +167,7 @@
     let allJobs = [];
     let refreshInterval = null;
     let pendingApprovalJobs = [];
+    let uploadErrorJobs = [];
     let availableWorkers = [];
     let availablePresets = [];
     let currentApprovalJobId = null;
@@ -421,10 +435,11 @@
 
     async function loadApprovalData() {
         try {
-            const [jobsRes, workersRes, presetsRes] = await Promise.all([
+            const [jobsRes, workersRes, presetsRes, uploadErrorsRes] = await Promise.all([
                 fetch('/api/jobs/awaiting-approval'),
                 fetch('/api/workers'),
-                fetch('/api/jobs/presets')
+                fetch('/api/jobs/presets'),
+                fetch('/api/jobs/upload-errors')
             ]);
 
             pendingApprovalJobs = await jobsRes.json();
@@ -432,11 +447,56 @@
             availableWorkers = (workersData || []).filter(w => w.status !== 'offline');
             const presetsData = await presetsRes.json();
             availablePresets = presetsData.presets || [];
+            uploadErrorJobs = await uploadErrorsRes.json();
 
             renderApprovalSection();
+            renderUploadErrorsSection();
         } catch (error) {
             console.error('Failed to load approval data:', error);
         }
+    }
+
+    function renderUploadErrorsSection() {
+        const section = document.getElementById('upload-errors-section');
+        const container = document.getElementById('upload-errors-container');
+        const countBadge = document.getElementById('upload-errors-count');
+
+        countBadge.textContent = uploadErrorJobs.length;
+
+        if (uploadErrorJobs.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        container.innerHTML = `<div class="row g-3">${uploadErrorJobs.map(job => `
+            <div class="col-md-6 col-xl-4">
+                <div class="job-card" style="border-left: 3px solid var(--bs-danger);">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="badge bg-danger">upload failed</span>
+                            <span class="badge bg-secondary ms-1">transcode</span>
+                        </div>
+                    </div>
+                    <div class="fw-medium mb-2 text-truncate" title="${job.output_name || 'Unknown'}">
+                        ${job.output_name || 'Unknown'}
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <i class="bi bi-file-earmark me-1"></i>
+                        ${job.output_file || 'File location unknown'}
+                    </div>
+                    <div class="small text-danger mb-3">
+                        <i class="bi bi-exclamation-circle me-1"></i>
+                        ${job.error || 'Upload failed'}
+                    </div>
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        File is available locally. Restart agent to retry upload.
+                    </div>
+                </div>
+            </div>
+        `).join('')}</div>`;
     }
 
     function renderApprovalSection() {
