@@ -568,3 +568,14 @@ class ServerClient:
                 break
             except Exception as e:
                 logger.warning("worker_heartbeat_loop_error", error=str(e))
+
+    async def stop_worker(self) -> None:
+        """Stop the worker and cancel heartbeat task."""
+        if hasattr(self, '_worker_heartbeat_task') and self._worker_heartbeat_task:
+            self._worker_heartbeat_task.cancel()
+            try:
+                await self._worker_heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._worker_heartbeat_task = None
+            logger.info("worker_stopped")

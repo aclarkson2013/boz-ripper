@@ -57,14 +57,22 @@ class WorkerService:
         self._running = True
 
         # Start worker tasks
-        for i in range(self.worker_config.max_jobs):
+        max_jobs = self.worker_config.max_concurrent_jobs
+        for i in range(max_jobs):
             task = asyncio.create_task(self._worker_loop(i))
             self._worker_tasks.append(task)
 
+        # Determine GPU type
+        gpu_type = "none"
+        if self.worker_config.nvenc:
+            gpu_type = "nvenc"
+        elif self.worker_config.qsv:
+            gpu_type = "qsv"
+
         logger.info(
             "worker_started",
-            max_jobs=self.worker_config.max_jobs,
-            gpu_type=self.worker_config.gpu_type,
+            max_jobs=max_jobs,
+            gpu_type=gpu_type,
         )
 
     async def stop(self) -> None:
