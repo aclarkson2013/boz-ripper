@@ -1,6 +1,8 @@
-"""Disc detection service for Windows using WMI."""
+"""Disc detection service for Windows using ctypes."""
 
 import asyncio
+import ctypes
+import string
 from typing import Callable, Optional
 
 import structlog
@@ -61,7 +63,7 @@ class DiscDetector:
         logger.info("disc_detector_stopped")
 
     def _discover_drives(self) -> list[str]:
-        """Discover optical drives on the system.
+        """Discover optical drives on the system using ctypes.
 
         Returns:
             List of drive letters (e.g., ["D:", "E:"])
@@ -69,35 +71,18 @@ class DiscDetector:
         if self.config.drives:
             return self.config.drives
 
-        # Use WMI to find optical drives (synchronous)
-        return self._wmi_discover_drives()
+        # Use ctypes to find CD-ROM drives (no WMI)
+        drives = []
+        DRIVE_CDROM = 5
 
-    def _wmi_discover_drives(self) -> list[str]:
-        """Use WMI to discover optical drives."""
-        try:
-            import wmi
+        for letter in string.ascii_uppercase:
+            drive_path = f"{letter}:\\"
+            drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive_path)
+            if drive_type == DRIVE_CDROM:
+                drives.append(f"{letter}:")
+                logger.debug("optical_drive_found", drive=f"{letter}:")
 
-            c = wmi.WMI()
-            drives = []
-
-            for drive in c.Win32_CDROMDrive():
-                drive_letter = drive.Drive
-                if drive_letter:
-                    drives.append(drive_letter)
-                    logger.debug(
-                        "optical_drive_found",
-                        drive=drive_letter,
-                        name=drive.Name,
-                    )
-
-            return drives
-
-        except ImportError:
-            logger.warning("wmi_not_available", msg="Falling back to manual config")
-            return []
-        except Exception as e:
-            logger.error("wmi_discovery_failed", error=str(e))
-            return []
+        return drives
 
     async def _monitor_loop(self, drives: list[str]) -> None:
         """Main monitoring loop."""
@@ -137,14 +122,11 @@ class DiscDetector:
     def _get_disc_info(self, drive: str) -> Optional[dict]:
         """Get information about a disc in the drive.
 
-        Uses ctypes to check drive status without WMI (faster and more reliable).
+        Uses ctypes to check drive status (no WMI).
 
         Returns:
             Dict with disc info if present, None if no disc
         """
-        import ctypes
-        import os
-
         # Ensure drive has proper format (e.g., "I:" -> "I:\\")
         drive_path = drive if drive.endswith("\\") else f"{drive}\\"
 
