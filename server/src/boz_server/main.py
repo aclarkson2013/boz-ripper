@@ -14,6 +14,8 @@ from boz_server.core.config import settings
 from boz_server.services.agent_manager import AgentManager
 from boz_server.services.job_queue import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
+from boz_server.services.preview_generator import PreviewGenerator
+from boz_server.services.thetvdb_client import TheTVDBClient
 from boz_server.services.worker_manager import WorkerManager
 
 # Configure logging
@@ -29,6 +31,20 @@ job_queue = JobQueue()
 nas_organizer = NASOrganizer()
 worker_manager = WorkerManager()
 
+# Initialize TheTVDB client if API key is configured
+thetvdb_client = None
+if settings.thetvdb_api_key:
+    logger.info("TheTVDB API key configured, initializing client")
+    thetvdb_client = TheTVDBClient(settings.thetvdb_api_key)
+else:
+    logger.warning("TheTVDB API key not configured, TV show metadata lookup will be disabled")
+
+# Initialize preview generator
+preview_generator = PreviewGenerator(
+    thetvdb_client=thetvdb_client,
+    output_dir=settings.output_dir,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +52,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting Boz Ripper Server v{__version__}")
 
-    init_services(agent_manager, job_queue, nas_organizer, worker_manager)
+    init_services(
+        agent_manager,
+        job_queue,
+        nas_organizer,
+        worker_manager,
+        preview_generator,
+        thetvdb_client,
+    )
     await agent_manager.start()
     await nas_organizer.start()
     await worker_manager.start()
@@ -50,6 +73,8 @@ async def lifespan(app: FastAPI):
     await agent_manager.stop()
     await nas_organizer.stop()
     await worker_manager.stop()
+    if thetvdb_client:
+        await thetvdb_client.close()
 
 
 app = FastAPI(

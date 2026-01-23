@@ -64,6 +64,22 @@
     </div>
 </div>
 
+<!-- Preview Pending Alert (if any) -->
+<div id="preview-alert" class="alert alert-warning mb-4" style="display: none;">
+    <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-3">
+            <i class="bi bi-exclamation-triangle-fill" style="font-size: 1.5rem;"></i>
+            <div>
+                <strong id="preview-alert-count">0 discs</strong> awaiting preview review
+                <p class="mb-0 small mt-1">Please review and approve before ripping can begin</p>
+            </div>
+        </div>
+        <a href="{{ url_for('discs_page') }}" class="btn btn-warning btn-sm">
+            <i class="bi bi-eye"></i> Review Now
+        </a>
+    </div>
+</div>
+
 <div class="row g-4">
     <!-- Active Jobs -->
     <div class="col-lg-8">
@@ -368,6 +384,17 @@
             document.getElementById('stat-workers-available').textContent =
                 `${data.counts?.workers_available || 0}/${data.counts?.workers_total || 0}`;
             document.getElementById('stat-discs-detected').textContent = data.counts?.discs_detected || 0;
+
+            // Show/hide preview alert
+            const pendingPreviews = data.counts?.pending_previews || 0;
+            const previewAlert = document.getElementById('preview-alert');
+            if (pendingPreviews > 0) {
+                previewAlert.style.display = 'block';
+                document.getElementById('preview-alert-count').textContent =
+                    `${pendingPreviews} ${pendingPreviews === 1 ? 'disc' : 'discs'}`;
+            } else {
+                previewAlert.style.display = 'none';
+            }
 
             // Render sections
             renderActiveJobs(data.jobs?.active);

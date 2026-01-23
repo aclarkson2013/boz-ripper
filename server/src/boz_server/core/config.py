@@ -49,5 +49,13 @@ class Settings(BaseSettings):
     worker_assignment_strategy: str = "priority"  # priority, round_robin, load_balance
     worker_auto_failover: bool = True  # Auto-reassign jobs if worker goes offline
 
+    # TheTVDB settings
+    thetvdb_api_key: Optional[str] = None  # TheTVDB v4 API key
+
+    # Preview/extras filtering settings
+    extras_min_duration_seconds: int = 600  # 10 minutes - titles shorter are likely extras
+    extras_duration_variance: float = 0.4  # 40% - titles with >40% duration variance from median are likely extras
+    auto_approve_previews: bool = False  # Auto-approve previews (bypass manual approval)
+
 
 settings = Settings()

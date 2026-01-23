@@ -15,6 +15,22 @@ class DiscType(str, Enum):
     UNKNOWN = "Unknown"
 
 
+class MediaType(str, Enum):
+    """Type of media content."""
+
+    MOVIE = "movie"
+    TV_SHOW = "tv_show"
+    UNKNOWN = "unknown"
+
+
+class PreviewStatus(str, Enum):
+    """Preview/approval status for disc."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class Title(BaseModel):
     """A title (movie/episode) on a disc."""
 
@@ -24,6 +40,14 @@ class Title(BaseModel):
     size_bytes: int
     chapters: int = 0
     selected: bool = False  # Whether to rip this title
+
+    # Preview/approval fields
+    is_extra: bool = False  # Detected as bonus content
+    proposed_filename: Optional[str] = None  # Generated filename
+    proposed_path: Optional[str] = None  # Full path including directory structure
+    episode_number: Optional[int] = None  # For TV shows
+    episode_title: Optional[str] = None  # Episode name from TheTVDB
+    confidence_score: float = 0.0  # Matching confidence (0-1)
 
     @property
     def duration_formatted(self) -> str:
@@ -61,6 +85,16 @@ class Disc(BaseModel):
     titles: list[Title] = Field(default_factory=list)
     detected_at: datetime = Field(default_factory=datetime.utcnow)
     status: str = "detected"  # detected, ripping, completed, ejected
+
+    # Preview/approval fields
+    media_type: MediaType = MediaType.UNKNOWN
+    preview_status: PreviewStatus = PreviewStatus.PENDING
+
+    # TV show fields
+    tv_show_name: Optional[str] = None
+    tv_season_number: Optional[int] = None
+    tv_season_id: Optional[str] = None  # Internal tracking ID for multi-disc seasons
+    thetvdb_series_id: Optional[int] = None
 
     @property
     def main_feature(self) -> Optional[Title]:

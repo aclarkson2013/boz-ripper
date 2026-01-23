@@ -128,6 +128,12 @@ def discs_page():
     return render_template("discs.html")
 
 
+@app.route("/discs/<disc_id>/preview")
+def disc_preview_page(disc_id: str):
+    """Disc preview/approval page."""
+    return render_template("disc_preview.html", disc_id=disc_id)
+
+
 # -----------------------------------------------------------------------------
 # API Proxy Routes (for AJAX calls from dashboard)
 # -----------------------------------------------------------------------------
@@ -178,6 +184,7 @@ def api_dashboard():
             "jobs_completed": len(completed_jobs),
             "jobs_failed": len(failed_jobs),
             "discs_detected": len([d for d in discs if d.get("status") == "detected"]),
+            "pending_previews": len([d for d in discs if d.get("preview_status") == "pending"]),
         },
     })
 
@@ -293,6 +300,32 @@ def api_rip_disc(disc_id: str):
     data = request.get_json() or {}
     result = api_request("POST", f"/api/discs/{disc_id}/rip", json=data)
     return jsonify(result or {"error": "Failed to start rip"})
+
+
+@app.route("/api/discs/<disc_id>/preview/approve", methods=["POST"])
+def api_approve_preview(disc_id: str):
+    """Approve disc preview with optional edits."""
+    data = request.get_json() or {}
+    result = api_request("POST", f"/api/discs/{disc_id}/preview/approve", json=data)
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Failed to approve preview"}), 400
+
+
+@app.route("/api/discs/<disc_id>/preview/reject", methods=["POST"])
+def api_reject_preview(disc_id: str):
+    """Reject disc preview."""
+    result = api_request("POST", f"/api/discs/{disc_id}/preview/reject")
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Failed to reject preview"}), 400
+
+
+@app.route("/api/tv-seasons/<season_id>")
+def api_tv_season(season_id: str):
+    """Get TV season tracking info."""
+    season = api_request("GET", f"/api/tv-seasons/{season_id}")
+    return jsonify(season or {})
 
 
 @app.route("/api/health")

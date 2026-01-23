@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}Disc Preview{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preview-header {
+        background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
+        border: 1px solid #334155;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .media-type-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .media-type-movie {
+        background: rgba(59, 130, 246, 0.2);
+        color: var(--boz-info);
+    }
+
+    .media-type-tv {
+        background: rgba(139, 92, 246, 0.2);
+        color: #a78bfa;
+    }
+
+    .media-type-unknown {
+        background: rgba(100, 116, 139, 0.2);
+        color: #94a3b8;
+    }
+
+    .preview-status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .preview-pending {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--boz-warning);
+    }
+
+    .preview-approved {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--boz-success);
+    }
+
+    .preview-rejected {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--boz-danger);
+    }
+
+    .tv-info-panel {
+        background: rgba(139, 92, 246, 0.1);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .track-table {
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    .track-table th {
+        background: #1e293b;
+        padding: 1rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #94a3b8;
+    }
+
+    .track-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #334155;
+    }
+
+    .track-table tr:hover {
+        background: rgba(99, 102, 241, 0.05);
+    }
+
+    .track-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        cursor: pointer;
+    }
+
+    .track-type-main {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--boz-success);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .track-type-extra {
+        background: rgba(100, 116, 139, 0.2);
+        color: #94a3b8;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .confidence-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .confidence-high {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--boz-success);
+    }
+
+    .confidence-medium {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--boz-warning);
+    }
+
+    .confidence-low {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--boz-danger);
+    }
+
+    .editable-field {
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #e2e8f0;
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        width: 100%;
+    }
+
+    .editable-field:focus {
+        outline: none;
+        border-color: var(--boz-primary);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .btn-approve {
+        background: var(--boz-success);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-approve:hover {
+        background: #0ea572;
+        transform: translateY(-2px);
+    }
+
+    .btn-reject {
+        background: var(--boz-danger);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-reject:hover {
+        background: #dc2626;
+        transform: translateY(-2px);
+    }
+
+    .btn-cancel {
+        background: #334155;
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-cancel:hover {
+        background: #475569;
+    }
+
+    .loading-spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #ffffff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">Disc Preview</h1>
+            <p class="text-muted mb-0">Review and approve disc contents before ripping</p>
+        </div>
+        <a href="{{ url_for('discs_page') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Discs
+        </a>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-muted">Loading disc preview...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="alert alert-danger" style="display: none;">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span id="error-message">Failed to load disc preview</span>
+    </div>
+
+    <!-- Preview Content -->
+    <div id="preview-content" style="display: none;">
+        <!-- Disc Header -->
+        <div class="preview-header" id="disc-header">
+            <!-- Will be populated by JavaScript -->
+        </div>
+
+        <!-- TV Show Info Panel (conditional) -->
+        <div id="tv-info-panel" class="tv-info-panel" style="display: none;">
+            <!-- Will be populated by JavaScript if TV show -->
+        </div>
+
+        <!-- Tracks Table -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Disc Contents</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="track-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%">Select</th>
+                                <th style="width: 5%">#</th>
+                                <th style="width: 8%">Type</th>
+                                <th style="width: 35%">Proposed Filename</th>
+                                <th style="width: 8%">Duration</th>
+                                <th style="width: 8%">Size</th>
+                                <th style="width: 10%">Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tracks-tbody">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button id="btn-approve" class="btn-approve">
+                <i class="bi bi-check-circle"></i> Approve & Rip
+            </button>
+            <button id="btn-reject" class="btn-reject">
+                <i class="bi bi-x-circle"></i> Reject
+            </button>
+            <a href="{{ url_for('discs_page') }}" class="btn-cancel">
+                <i class="bi bi-arrow-left"></i> Cancel
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const discId = "{{ disc_id }}";
+    let discData = null;
+
+    // Load disc preview on page load
+    document.addEventListener('DOMContentLoaded', loadDiscPreview);
+
+    async function loadDiscPreview() {
+        try {
+            const response = await fetch(`/api/discs/${discId}`);
+            if (!response.ok) throw new Error('Failed to fetch disc');
+
+            discData = await response.json();
+            renderPreview();
+
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('preview-content').style.display = 'block';
+        } catch (error) {
+            console.error('Error loading preview:', error);
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display = 'block';
+            document.getElementById('error-message').textContent = error.message;
+        }
+    }
+
+    function renderPreview() {
+        renderDiscHeader();
+        if (discData.media_type === 'tv_show') {
+            renderTVInfo();
+        }
+        renderTracks();
+    }
+
+    function renderDiscHeader() {
+        const mediaTypeClass = `media-type-${discData.media_type}`;
+        const mediaTypeIcon = discData.media_type === 'movie' ? 'film' :
+                             discData.media_type === 'tv_show' ? 'tv' : 'question-circle';
+        const mediaTypeLabel = discData.media_type === 'movie' ? 'Movie' :
+                              discData.media_type === 'tv_show' ? 'TV Show' : 'Unknown';
+
+        const previewStatusClass = `preview-${discData.preview_status}`;
+        const previewStatusLabel = discData.preview_status.charAt(0).toUpperCase() +
+                                  discData.preview_status.slice(1);
+
+        const header = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="mb-3">
+                        <span class="media-type-badge ${mediaTypeClass}">
+                            <i class="bi bi-${mediaTypeIcon}"></i>
+                            ${mediaTypeLabel}
+                        </span>
+                        <span class="preview-status-badge ${previewStatusClass}">
+                            ${previewStatusLabel}
+                        </span>
+                    </div>
+                    <h2 class="mb-2">${discData.disc_name}</h2>
+                    <div class="text-muted">
+                        <span><i class="bi bi-disc"></i> ${discData.disc_type}</span>
+                        <span class="ms-3"><i class="bi bi-list-ol"></i> ${discData.titles.length} titles</span>
+                        <span class="ms-3"><i class="bi bi-clock"></i> Detected ${formatTimeAgo(discData.detected_at)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('disc-header').innerHTML = header;
+    }
+
+    function renderTVInfo() {
+        if (!discData.tv_show_name) return;
+
+        const info = `
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa; width: 48px; height: 48px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-tv" style="font-size: 1.5rem;"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h5 class="mb-1" style="color: #a78bfa;">${discData.tv_show_name}</h5>
+                    <p class="mb-0 text-muted">Season ${discData.tv_season_number}</p>
+                    ${discData.thetvdb_series_id ? `<p class="mb-0 text-muted" style="font-size: 0.875rem;"><i class="bi bi-database"></i> TheTVDB ID: ${discData.thetvdb_series_id}</p>` : ''}
+                </div>
+            </div>
+        `;
+        document.getElementById('tv-info-panel').innerHTML = info;
+        document.getElementById('tv-info-panel').style.display = 'block';
+    }
+
+    function renderTracks() {
+        const tbody = document.getElementById('tracks-tbody');
+        tbody.innerHTML = '';
+
+        discData.titles.forEach(title => {
+            const typeClass = title.is_extra ? 'track-type-extra' : 'track-type-main';
+            const typeLabel = title.is_extra ? 'Extra' : 'Main';
+
+            // Confidence indicator
+            let confidenceHtml = '-';
+            if (title.confidence_score > 0) {
+                const score = (title.confidence_score * 100).toFixed(0);
+                let confClass = 'confidence-low';
+                let confLabel = 'Low';
+                if (title.confidence_score >= 0.9) {
+                    confClass = 'confidence-high';
+                    confLabel = 'High';
+                } else if (title.confidence_score >= 0.7) {
+                    confClass = 'confidence-medium';
+                    confLabel = 'Medium';
+                }
+                confidenceHtml = `<span class="confidence-indicator ${confClass}">${confLabel} (${score}%)</span>`;
+            }
+
+            const row = `
+                <tr data-index="${title.index}">
+                    <td class="text-center">
+                        <input type="checkbox" class="track-checkbox"
+                               ${title.selected ? 'checked' : ''}
+                               onchange="toggleTrack(${title.index}, this.checked)">
+                    </td>
+                    <td>${title.index}</td>
+                    <td><span class="${typeClass}">${typeLabel}</span></td>
+                    <td>
+                        <input type="text" class="editable-field"
+                               value="${title.proposed_filename || title.name}"
+                               onchange="updateFilename(${title.index}, this.value)">
+                    </td>
+                    <td>${formatDuration(title.duration_seconds)}</td>
+                    <td>${formatSize(title.size_bytes)}</td>
+                    <td>${confidenceHtml}</td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function toggleTrack(index, selected) {
+        const title = discData.titles.find(t => t.index === index);
+        if (title) {
+            title.selected = selected;
+        }
+    }
+
+    function updateFilename(index, filename) {
+        const title = discData.titles.find(t => t.index === index);
+        if (title) {
+            title.proposed_filename = filename;
+        }
+    }
+
+    // Approve button handler
+    document.getElementById('btn-approve').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-approve');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> Approving...';
+
+        try {
+            const response = await fetch(`/api/discs/${discId}/preview/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title_edits: discData.titles })
+            });
+
+            if (!response.ok) throw new Error('Failed to approve preview');
+
+            // Success - start ripping
+            const ripResponse = await fetch(`/api/discs/${discId}/rip`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            if (!ripResponse.ok) throw new Error('Failed to start ripping');
+
+            // Redirect to discs page
+            window.location.href = '/discs';
+        } catch (error) {
+            console.error('Error approving preview:', error);
+            alert('Failed to approve preview: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-circle"></i> Approve & Rip';
+        }
+    });
+
+    // Reject button handler
+    document.getElementById('btn-reject').addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to reject this disc? It will not be ripped.')) {
+            return;
+        }
+
+        const btn = document.getElementById('btn-reject');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...';
+
+        try {
+            const response = await fetch(`/api/discs/${discId}/preview/reject`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) throw new Error('Failed to reject preview');
+
+            // Redirect to discs page
+            window.location.href = '/discs';
+        } catch (error) {
+            console.error('Error rejecting preview:', error);
+            alert('Failed to reject preview: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-x-circle"></i> Reject';
+        }
+    });
+</script>
+{% endblock %}

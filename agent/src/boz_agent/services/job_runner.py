@@ -133,6 +133,24 @@ class JobRunner:
         if not disc:
             raise RuntimeError(f"Disc not found: {disc_id}")
 
+        # Check preview approval status
+        preview_status = disc.get("preview_status", "pending")
+        if preview_status == "pending":
+            logger.info(
+                "rip_waiting_for_preview_approval",
+                job_id=job_id,
+                disc_id=disc_id,
+                preview_status=preview_status,
+            )
+            # Don't fail the job, just return and let it be retried on next poll
+            # Reset status back to assigned so it will be picked up again
+            await self.server_client.update_job_status(job_id, "assigned", progress=0)
+            return
+        elif preview_status == "rejected":
+            logger.warning("rip_preview_rejected", job_id=job_id, disc_id=disc_id)
+            raise RuntimeError(f"Disc preview was rejected, cannot rip")
+
+        # Preview is approved, proceed with rip
         drive = disc.get("drive", "D:")
 
         # Create output directory

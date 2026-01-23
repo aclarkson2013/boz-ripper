@@ -13,6 +13,11 @@ services:
     environment:
       - BOZ_DEBUG=false
       - BOZ_API_KEY=${BOZ_API_KEY:-}
+      # TheTVDB settings
+      - BOZ_THETVDB_API_KEY=${BOZ_THETVDB_API_KEY:-}
+      # Extras filtering settings
+      - BOZ_EXTRAS_MIN_DURATION_SECONDS=${BOZ_EXTRAS_MIN_DURATION_SECONDS:-600}
+      - BOZ_EXTRAS_DURATION_VARIANCE=${BOZ_EXTRAS_DURATION_VARIANCE:-0.4}
       # NAS settings (optional)
       - BOZ_NAS_ENABLED=${BOZ_NAS_ENABLED:-false}
       - BOZ_NAS_HOST=${BOZ_NAS_HOST:-}

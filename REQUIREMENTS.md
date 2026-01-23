@@ -18,16 +18,16 @@ Extracted from PRD v2.1 (January 18, 2026)
 | A3 | Extract disc name/label | P0 | [x] |
 | A4 | Call MakeMKV for track analysis | P0 | [x] |
 | A5 | Send track list to server | P0 | [x] |
-| A6 | Wait for server approval before ripping | P0 | [ ] |
+| A6 | Wait for server approval before ripping | P0 | [x] |
 | A7 | Support multiple disc drives | P1 | [x] |
-| A8 | Query server for worker assignment before transcoding | P0 | [ ] |
-| A9 | Support "local" mode: transcode then upload final | P0 | [ ] |
+| A8 | Query server for worker assignment before transcoding | P0 | [x] |
+| A9 | Support "local" mode: transcode then upload final | P0 | [x] |
 | A10 | Support "remote" mode: upload raw for remote transcoding | P0 | [ ] |
-| A11 | Act as transcoding worker if configured | P0 | [ ] |
-| A12 | Register worker capabilities with server on startup | P0 | [ ] |
+| A11 | Act as transcoding worker if configured | P0 | [x] |
+| A12 | Register worker capabilities with server on startup | P0 | [x] |
 | A13 | Send heartbeat to server every 30 seconds | P1 | [x] |
 | A14 | Call MakeMKV to rip approved tracks | P0 | [x] |
-| A15 | Monitor progress and report to user | P1 | [~] |
+| A15 | Monitor progress and report to user | P1 | [x] |
 | A16 | Upload files via chunked transfer | P0 | [x] |
 | A17 | Delete staging files after upload | P0 | [ ] |
 | A18 | Auto-eject disc on completion | P1 | [ ] |
@@ -39,21 +39,21 @@ Extracted from PRD v2.1 (January 18, 2026)
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
 | S1 | Receive track analysis from agent | P0 | [x] |
-| S2 | Detect TV show vs movie from disc name | P0 | [ ] |
-| S3 | Query TheTVDB for TV show metadata | P0 | [ ] |
+| S2 | Detect TV show vs movie from disc name | P0 | [x] |
+| S3 | Query TheTVDB for TV show metadata | P0 | [x] |
 | S4 | Query OMDb for movie metadata | P1 | [ ] |
-| S5 | Generate preview with proposed filenames | P0 | [ ] |
-| S6 | Track multi-disc TV seasons (episode continuation) | P0 | [ ] |
-| S7 | Filter extras/bloopers from episodes | P0 | [ ] |
-| S8 | Allow user approval/modification of preview | P0 | [ ] |
-| S9 | Maintain registry of all workers | P0 | [ ] |
-| S10 | Monitor worker health via heartbeats | P0 | [ ] |
-| S11 | Assign transcode jobs based on strategy (priority/round-robin/load-balance) | P0 | [ ] |
-| S12 | Support worker priorities (1-99) | P0 | [ ] |
+| S5 | Generate preview with proposed filenames | P0 | [x] |
+| S6 | Track multi-disc TV seasons (episode continuation) | P0 | [x] |
+| S7 | Filter extras/bloopers from episodes | P0 | [x] |
+| S8 | Allow user approval/modification of preview | P0 | [x] |
+| S9 | Maintain registry of all workers | P0 | [x] |
+| S10 | Monitor worker health via heartbeats | P0 | [x] |
+| S11 | Assign transcode jobs based on strategy (priority/round-robin/load-balance) | P0 | [~] |
+| S12 | Support worker priorities (1-99) | P0 | [x] |
 | S13 | Handle worker failover automatically | P1 | [ ] |
-| S14 | Provide worker management UI | P1 | [ ] |
+| S14 | Provide worker management UI | P1 | [x] |
 | S15 | Queue jobs in SQLite database | P0 | [ ] |
-| S16 | Process jobs sequentially or parallel (configurable) | P0 | [~] |
+| S16 | Process jobs sequentially or parallel (configurable) | P0 | [x] |
 | S17 | Receive transcoded files from workers | P0 | [x] |
 | S18 | Organize files to network shares | P0 | [~] |
 | S19 | Trigger Plex library scan | P1 | [ ] |
@@ -68,11 +68,11 @@ Extracted from PRD v2.1 (January 18, 2026)
 |----|-------------|----------|--------|
 | W1 | Register with server on startup | P0 | [x] |
 | W2 | Report capabilities (NVENC, QSV, CPU, etc.) | P0 | [x] |
-| W3 | Poll server for transcode jobs | P0 | [~] |
+| W3 | Poll server for transcode jobs | P0 | [x] |
 | W4 | Download raw MKV from server (if remote worker) | P0 | [ ] |
-| W5 | Transcode with HandBrake using assigned preset | P0 | [ ] |
-| W6 | Upload final file to server (if remote worker) | P0 | [ ] |
-| W7 | Report progress to server | P1 | [ ] |
+| W5 | Transcode with HandBrake using assigned preset | P0 | [x] |
+| W6 | Upload final file to server (if remote worker) | P0 | [~] |
+| W7 | Report progress to server | P1 | [x] |
 | W8 | Send heartbeat every 30 seconds | P0 | [x] |
 | W9 | Handle job cancellation gracefully | P1 | [ ] |
 | W10 | Support concurrent jobs (configurable max) | P1 | [x] |
@@ -83,15 +83,15 @@ Extracted from PRD v2.1 (January 18, 2026)
 
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
-| TV1 | Detect TV show from disc name patterns | P0 | [ ] |
-| TV2 | Parse season number from disc name | P0 | [ ] |
-| TV3 | Query TheTVDB for episode list | P0 | [ ] |
-| TV4 | Match tracks to episodes by duration | P0 | [ ] |
-| TV5 | Track disc sequence within season | P0 | [ ] |
-| TV6 | Continue episode numbering across discs | P0 | [ ] |
-| TV7 | Filter extras using duration + naming patterns | P0 | [ ] |
-| TV8 | Generate Plex-compatible filenames | P0 | [ ] |
-| TV9 | Support manual episode override | P1 | [ ] |
+| TV1 | Detect TV show from disc name patterns | P0 | [x] |
+| TV2 | Parse season number from disc name | P0 | [x] |
+| TV3 | Query TheTVDB for episode list | P0 | [x] |
+| TV4 | Match tracks to episodes by duration | P0 | [x] |
+| TV5 | Track disc sequence within season | P0 | [x] |
+| TV6 | Continue episode numbering across discs | P0 | [x] |
+| TV7 | Filter extras using duration + naming patterns | P0 | [x] |
+| TV8 | Generate Plex-compatible filenames | P0 | [x] |
+| TV9 | Support manual episode override | P1 | [x] |
 
 ### Extras Detection Patterns
 Tracks matching these patterns should be flagged as extras:
@@ -114,27 +114,44 @@ Tracks matching these patterns should be flagged as extras:
 | P7 | Require explicit approval before ripping | P0 | [ ] |
 | P8 | Support auto-approve mode (optional) | P2 | [ ] |
 
+### 5.1 Transcode Approval Workflow [IMPLEMENTED]
+
+| ID | Requirement | Priority | Status |
+|----|-------------|----------|--------|
+| TA1 | Transcode jobs wait for user approval | P0 | [x] |
+| TA2 | User selects worker for transcoding | P0 | [x] |
+| TA3 | User selects preset for transcoding | P0 | [x] |
+| TA4 | Dashboard shows "Awaiting Approval" section | P0 | [x] |
+| TA5 | Approval modal with worker/preset selection | P0 | [x] |
+| TA6 | Show file size and source disc name | P1 | [x] |
+| TA7 | Show upload errors for manual retry | P1 | [x] |
+
 ---
 
 ## 6. API Endpoints
 
-### 6.1 Worker Management Endpoints (NEW - Not Implemented)
+### 6.1 Worker Management Endpoints
 
 | Endpoint | Method | Status |
 |----------|--------|--------|
-| `/api/workers/register` | POST | [ ] |
-| `/api/workers/{worker_id}/heartbeat` | POST | [ ] |
-| `/api/workers` | GET | [ ] |
-| `/api/workers/{worker_id}` | GET | [ ] |
+| `/api/workers/register` | POST | [x] |
+| `/api/workers/{worker_id}/heartbeat` | POST | [x] |
+| `/api/workers` | GET | [x] |
+| `/api/workers/{worker_id}` | GET | [x] |
+| `/api/workers/stats` | GET | [x] |
 | `/api/workers/{worker_id}/update-priority` | POST | [ ] |
 | `/api/workers/{worker_id}` | DELETE | [ ] |
 
-### 6.2 Job Assignment Endpoints (NEW - Not Implemented)
+### 6.2 Job Assignment/Approval Endpoints
 
 | Endpoint | Method | Status |
 |----------|--------|--------|
-| `/api/jobs/{job_id}/request-worker` | POST | [ ] |
-| `/api/workers/{worker_id}/jobs/poll` | POST | [ ] |
+| `/api/jobs/{job_id}/approve` | POST | [x] |
+| `/api/jobs/awaiting-approval` | GET | [x] |
+| `/api/jobs/presets` | GET | [x] |
+| `/api/jobs/upload-errors` | GET | [x] |
+| `/api/jobs/stats` | GET | [x] |
+| `/api/jobs/pending` | GET | [x] |
 
 ### 6.3 Existing Endpoints
 
@@ -158,39 +175,35 @@ Tracks matching these patterns should be flagged as extras:
 
 ## 7. Data Models
 
-### 7.1 Worker Schema (NEW - Not Implemented)
+### 7.1 Worker Schema [IMPLEMENTED]
 
 ```python
 class Worker:
     worker_id: str              # "DESKTOP-MAIN-4080"
-    worker_type: str            # "agent", "remote", "server"
+    worker_type: WorkerType     # "agent", "remote", "server"
     hostname: str
-    capabilities: {
-        "nvenc": bool,
-        "nvenc_generation": int,
-        "qsv": bool,
-        "vaapi": bool,
-        "hevc": bool,
-        "av1": bool,
-        "cpu_threads": int,
-        "max_concurrent": int
-    }
+    capabilities: WorkerCapabilities  # nvenc, qsv, hevc, av1, cpu_threads, max_concurrent
     priority: int               # 1-99 (1 = highest)
     enabled: bool
-    status: str                 # "available", "busy", "offline"
+    status: WorkerStatus        # "available", "busy", "offline"
     current_jobs: list[str]
     last_seen: datetime
     total_jobs_completed: int
-    avg_transcode_time_seconds: float
+    agent_id: str | None        # Links worker to agent for job assignment
 ```
 
-### 7.2 Job Schema Updates Needed
+### 7.2 Job Schema Updates [PARTIALLY IMPLEMENTED]
 
 ```python
-# NEW fields to add to Job model:
-assigned_worker_id: str | None
-worker_assigned_at: datetime | None
-transcode_mode: str | None      # "local", "remote", "server"
+# Implemented fields:
+requires_approval: bool = False     # [x] Transcode jobs wait for approval
+source_disc_name: str | None        # [x] Original disc name for display
+input_file_size: int | None         # [x] File size for display
+assigned_agent_id: str | None       # [x] Agent assigned to execute job
+preset: str | None                  # [x] Transcoding preset selected by user
+
+# NOT YET implemented:
+transcode_mode: str | None          # [ ] "local", "remote", "server"
 transcode_started_at: datetime | None
 transcode_completed_at: datetime | None
 transcode_duration_seconds: float | None
@@ -249,24 +262,34 @@ workers:
 - [x] Discs page with title selection
 - [x] Docker integration
 
-### Phase 2: Worker System [NEXT]
-- [ ] Worker model and database schema
-- [ ] Worker registration endpoint
-- [ ] Worker heartbeat endpoint
-- [ ] Worker capabilities detection (GPU)
-- [ ] Worker assignment logic (priority-based)
-- [ ] Update agent to register as worker
-- [ ] HandBrake integration for transcoding
-- [ ] Local vs remote transcode modes
+### Phase 2: Worker System [COMPLETE]
+- [x] Worker model and database schema
+- [x] Worker registration endpoint
+- [x] Worker heartbeat endpoint
+- [x] Worker capabilities detection (GPU)
+- [x] Worker assignment logic (priority-based via approval)
+- [x] Update agent to register as worker
+- [x] HandBrake integration for transcoding
+- [x] Local transcode mode (agent transcodes locally, uploads result)
+- [ ] Remote transcode mode (upload raw, remote worker transcodes)
 
-### Phase 3: Preview/Approval Workflow
-- [ ] Preview model and generation
+### Phase 2.5: Transcode Approval Workflow [COMPLETE]
+- [x] Jobs require user approval before transcoding
+- [x] User selects worker and preset via dashboard
+- [x] Approval modal with worker/preset dropdowns
+- [x] Jobs awaiting approval section in dashboard
+- [x] Approve endpoint assigns job to selected worker
+- [x] Upload error visibility and retry mechanism
+- [x] Agent links worker to agent_id for job assignment
+
+### Phase 3: Preview/Approval Workflow [NEXT]
+- [ ] Preview model and generation (for rip track selection)
 - [ ] TV show detection logic
 - [ ] TheTVDB integration
 - [ ] Extras filtering
 - [ ] Preview UI in dashboard
-- [ ] Approval API endpoints
-- [ ] Agent waits for approval
+- [ ] Approval API endpoints for rip workflow
+- [ ] Agent waits for approval before ripping
 
 ### Phase 4: TV Show Intelligence
 - [ ] Multi-disc season tracking
@@ -299,24 +322,32 @@ workers:
 ## 11. Current Architecture Gap Analysis
 
 ### What Exists:
-- FastAPI server with basic job queue (in-memory)
+- FastAPI server with job queue (in-memory)
 - Agent with disc detection and MakeMKV ripping
-- Basic dashboard (Flask, separate service)
+- Flask dashboard (separate service) with full job/worker management
+- Worker system with registration, heartbeat, capabilities
+- HandBrake transcoding integration (local mode)
+- Transcode approval workflow (user selects worker + preset)
+- Upload with retry logic and error visibility
 
 ### What's Missing for PRD Compliance:
-1. **Worker System** - Separate from agents, handles transcoding
+1. ~~**Worker System**~~ - **IMPLEMENTED** (agents register as workers)
 2. **SQLite Database** - PRD requires persistent storage (S15)
-3. **Preview/Approval** - No workflow exists yet
-4. **TV Show Intelligence** - No metadata integration
-5. **HandBrake Integration** - Agent has stub, not functional
-6. **Worker Assignment** - No priority/failover logic
+3. **Rip Preview/Approval** - Track selection before ripping not implemented
+4. **TV Show Intelligence** - No metadata integration (TheTVDB, OMDb)
+5. ~~**HandBrake Integration**~~ - **IMPLEMENTED** (local transcode working)
+6. ~~**Worker Assignment**~~ - **IMPLEMENTED** (priority-based via approval)
+7. **Remote Transcode Mode** - Workers downloading/uploading raw files
+8. **Worker Failover** - Automatic reassignment on worker failure
+9. **Disc Name Cleanup** - Auto-detect disc as TV show vs movie
+10. **Plex Integration** - Trigger library scan after organize
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:
-- An agent CAN also be a worker (if GPU available)
-- Workers can exist without being agents (remote Proxmox)
-- Server can be a fallback worker (CPU only)
+- An agent CAN also be a worker (if GPU available) - **IMPLEMENTED**
+- Workers can exist without being agents (remote Proxmox) - Not yet
+- Server can be a fallback worker (CPU only) - Not yet
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: January 23, 2026*
