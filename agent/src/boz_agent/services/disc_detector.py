@@ -39,8 +39,8 @@ class DiscDetector:
         self._running = True
         logger.info("disc_detector_starting")
 
-        # Discover optical drives
-        drives = await self._discover_drives()
+        # Discover optical drives (synchronous WMI call)
+        drives = self._discover_drives()
         logger.info("optical_drives_found", drives=drives)
 
         # Start the monitoring loop
@@ -60,7 +60,7 @@ class DiscDetector:
 
         logger.info("disc_detector_stopped")
 
-    async def _discover_drives(self) -> list[str]:
+    def _discover_drives(self) -> list[str]:
         """Discover optical drives on the system.
 
         Returns:
@@ -69,7 +69,7 @@ class DiscDetector:
         if self.config.drives:
             return self.config.drives
 
-        # Use WMI to find optical drives (run directly, not in thread)
+        # Use WMI to find optical drives (synchronous)
         return self._wmi_discover_drives()
 
     def _wmi_discover_drives(self) -> list[str]:
