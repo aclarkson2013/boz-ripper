@@ -137,34 +137,58 @@ class DiscDetector:
     def _get_disc_info(self, drive: str) -> Optional[dict]:
         """Get information about a disc in the drive.
 
+        Uses ctypes to check drive status without WMI (faster and more reliable).
+
         Returns:
             Dict with disc info if present, None if no disc
         """
+        import ctypes
+        import os
+
+        # Ensure drive has proper format (e.g., "I:" -> "I:\\")
+        drive_path = drive if drive.endswith("\\") else f"{drive}\\"
+
         try:
-            import wmi
+            # Check drive type - should be DRIVE_CDROM (5)
+            drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive_path)
+            if drive_type != 5:  # Not a CD-ROM drive
+                return None
 
-            c = wmi.WMI()
+            # Try to get volume information - this will fail if no disc
+            volume_name_buf = ctypes.create_unicode_buffer(261)
+            serial_number = ctypes.c_ulong()
+            max_component_length = ctypes.c_ulong()
+            file_system_flags = ctypes.c_ulong()
+            file_system_name_buf = ctypes.create_unicode_buffer(261)
 
-            # Check if there's media in the drive
-            for cdrom in c.Win32_CDROMDrive():
-                if cdrom.Drive == drive:
-                    if cdrom.MediaLoaded:
-                        return {
-                            "drive": drive,
-                            "name": cdrom.VolumeName or "Unknown",
-                            "media_type": cdrom.MediaType or "Unknown",
-                        }
-                    return None
+            result = ctypes.windll.kernel32.GetVolumeInformationW(
+                drive_path,
+                volume_name_buf,
+                261,
+                ctypes.byref(serial_number),
+                ctypes.byref(max_component_length),
+                ctypes.byref(file_system_flags),
+                file_system_name_buf,
+                261,
+            )
 
-            return None
+            if result:
+                volume_name = volume_name_buf.value or "Unknown"
+                file_system = file_system_name_buf.value or "Unknown"
 
-        except ImportError:
-            # Fallback: try to access the drive directly
-            from pathlib import Path
+                # Determine media type from file system
+                media_type = "DVD" if file_system == "UDF" else "CD"
+                if "BD" in volume_name.upper() or "BLU" in volume_name.upper():
+                    media_type = "Blu-ray"
 
-            drive_path = Path(f"{drive}\\")
-            if drive_path.exists():
-                return {"drive": drive, "name": "Unknown", "media_type": "Unknown"}
+                logger.debug("disc_detected", drive=drive, name=volume_name, fs=file_system)
+                return {
+                    "drive": drive,
+                    "name": volume_name,
+                    "media_type": media_type,
+                    "file_system": file_system,
+                }
+
             return None
 
         except Exception as e:
