@@ -274,6 +274,32 @@ class ServerClient:
             logger.error("create_transcode_job_failed", error=str(e))
             return None
 
+    async def assign_job_to_self(self, job_id: str) -> bool:
+        """Assign a job to this agent.
+
+        Args:
+            job_id: Job ID to assign
+
+        Returns:
+            True if successful
+        """
+        if not self._agent_id:
+            logger.warning("cannot_assign_job_no_agent_id")
+            return False
+
+        try:
+            client = await self._get_client()
+            response = await client.post(
+                f"/api/jobs/{job_id}/assign",
+                json={"agent_id": self._agent_id}
+            )
+            response.raise_for_status()
+            logger.info("job_assigned_to_self", job_id=job_id)
+            return True
+        except Exception as e:
+            logger.error("assign_job_failed", job_id=job_id, error=str(e))
+            return False
+
     async def upload_file(self, file_path: Any, name: str) -> bool:
         """Upload a file to the server.
 

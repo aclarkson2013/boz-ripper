@@ -158,14 +158,18 @@ class JobRunner:
             job_id, "completed", progress=100, output_file=str(output_file)
         )
 
-        # If worker is enabled, automatically queue transcode
+        # If worker is enabled, automatically queue transcode and assign to self
         if self.worker and self.settings.worker.enabled:
             logger.info("queuing_transcode", input_file=str(output_file))
-            await self.server_client.create_transcode_job(
+            transcode_job = await self.server_client.create_transcode_job(
                 input_file=str(output_file),
                 output_name=output_name,
                 preset=self.settings.handbrake.preset,
             )
+            # Assign to ourselves so we pick it up
+            if transcode_job and transcode_job.get("job_id"):
+                await self.server_client.assign_job_to_self(transcode_job["job_id"])
+                logger.info("transcode_job_assigned", job_id=transcode_job["job_id"])
 
     async def _execute_transcode_job(self, job: dict) -> None:
         """Execute a transcode job using HandBrake."""
