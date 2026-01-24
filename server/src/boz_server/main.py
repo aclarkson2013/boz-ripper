@@ -11,12 +11,13 @@ from boz_server.api import agents_router, discs_router, files_router, jobs_route
 from boz_server.api.workers import router as workers_router
 from boz_server.api.deps import init_services
 from boz_server.core.config import settings
-from boz_server.services.agent_manager import AgentManager
-from boz_server.services.job_queue import JobQueue
+from boz_server.database import init_db
+from boz_server.services.agent_manager_db import AgentManager
+from boz_server.services.job_queue_db import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
-from boz_server.services.preview_generator import PreviewGenerator
+from boz_server.services.preview_generator_db import PreviewGenerator
 from boz_server.services.thetvdb_client import TheTVDBClient
-from boz_server.services.worker_manager import WorkerManager
+from boz_server.services.worker_manager_db import WorkerManager
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +52,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     logger.info(f"Starting Boz Ripper Server v{__version__}")
+
+    # Initialize database
+    logger.info("Initializing database...")
+    await init_db()
+    logger.info("Database initialized")
 
     init_services(
         agent_manager,
@@ -117,9 +123,9 @@ async def health() -> dict:
     return {
         "status": "healthy",
         "version": __version__,
-        "agents": len(agent_manager.get_all()),
-        "workers": worker_manager.get_stats(),
-        "queue": job_queue.get_queue_stats(),
+        "agents": len(await agent_manager.get_all()),
+        "workers": await worker_manager.get_stats(),
+        "queue": await job_queue.get_queue_stats(),
         "nas": nas_organizer.get_status(),
     }
 

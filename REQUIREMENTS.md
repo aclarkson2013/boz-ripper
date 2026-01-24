@@ -101,18 +101,18 @@ Tracks matching these patterns should be flagged as extras:
 
 ---
 
-## 5. Preview/Approval Workflow
+## 5. Preview/Approval Workflow [IMPLEMENTED - Phase 3]
 
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
-| P1 | Generate preview after disc analysis | P0 | [ ] |
-| P2 | Show all tracks with proposed names | P0 | [ ] |
-| P3 | Show destination paths | P0 | [ ] |
-| P4 | Allow track selection (include/exclude) | P0 | [ ] |
-| P5 | Allow filename editing | P1 | [ ] |
-| P6 | Allow media type override (movie/TV) | P1 | [ ] |
-| P7 | Require explicit approval before ripping | P0 | [ ] |
-| P8 | Support auto-approve mode (optional) | P2 | [ ] |
+| P1 | Generate preview after disc analysis | P0 | [x] |
+| P2 | Show all tracks with proposed names | P0 | [x] |
+| P3 | Show destination paths | P0 | [x] |
+| P4 | Allow track selection (include/exclude) | P0 | [x] |
+| P5 | Allow filename editing | P1 | [x] |
+| P6 | Allow media type override (movie/TV) | P1 | [~] |
+| P7 | Require explicit approval before ripping | P0 | [x] |
+| P8 | Support auto-approve mode (optional) | P2 | [~] |
 
 ### 5.1 Transcode Approval Workflow [IMPLEMENTED]
 
@@ -282,20 +282,34 @@ workers:
 - [x] Upload error visibility and retry mechanism
 - [x] Agent links worker to agent_id for job assignment
 
-### Phase 3: Preview/Approval Workflow [NEXT]
-- [ ] Preview model and generation (for rip track selection)
-- [ ] TV show detection logic
-- [ ] TheTVDB integration
-- [ ] Extras filtering
-- [ ] Preview UI in dashboard
-- [ ] Approval API endpoints for rip workflow
-- [ ] Agent waits for approval before ripping
+### Phase 3: Preview/Approval Workflow [COMPLETE ✅]
+- [x] Preview model and generation (for rip track selection)
+- [x] TV show detection logic
+- [x] TheTVDB integration
+- [x] Extras filtering
+- [x] Preview UI in dashboard
+- [x] Approval API endpoints for rip workflow
+- [x] Agent waits for approval before ripping
 
-### Phase 4: TV Show Intelligence
-- [ ] Multi-disc season tracking
-- [ ] Episode number continuation
-- [ ] Duration-based episode matching
-- [ ] Season/episode filename generation
+### Phase 4: SQLite Database Migration [COMPLETE ✅]
+- [x] Database schema design
+- [x] SQLite setup with SQLAlchemy ORM
+- [x] Migrate Job model to persistent storage
+- [x] Migrate Worker/Agent registries
+- [x] Migrate Disc tracking
+- [x] Migrate TVSeason cache (enables multi-disc across restarts)
+- [x] Update all service layers for database queries
+- [x] Repository layer with Pydantic ↔ ORM conversion
+- [ ] Set up Alembic migrations (Phase 4.1)
+- [ ] End-to-end testing (REQUIRED BEFORE PRODUCTION)
+
+### Phase 5: Remote Transcode Mode & File Organization [NEXT]
+- [ ] Remote worker raw file upload
+- [ ] Remote worker file download from server
+- [ ] Complete file organization to network shares
+- [ ] Plex library scan integration
+- [ ] Auto-cleanup of staging files
+- [ ] Auto-eject disc on completion
 
 ### Phase 5: Windows Service
 - [ ] Agent as Windows Service
@@ -332,15 +346,16 @@ workers:
 
 ### What's Missing for PRD Compliance:
 1. ~~**Worker System**~~ - **IMPLEMENTED** (agents register as workers)
-2. **SQLite Database** - PRD requires persistent storage (S15)
-3. **Rip Preview/Approval** - Track selection before ripping not implemented
-4. **TV Show Intelligence** - No metadata integration (TheTVDB, OMDb)
+2. ~~**SQLite Database**~~ - **IMPLEMENTED** (Phase 4 complete - persistent storage)
+3. ~~**Rip Preview/Approval**~~ - **IMPLEMENTED** (Phase 3 complete)
+4. ~~**TV Show Intelligence**~~ - **IMPLEMENTED** (TheTVDB integration, episode matching, multi-disc tracking)
 5. ~~**HandBrake Integration**~~ - **IMPLEMENTED** (local transcode working)
 6. ~~**Worker Assignment**~~ - **IMPLEMENTED** (priority-based via approval)
-7. **Remote Transcode Mode** - Workers downloading/uploading raw files
+7. **Remote Transcode Mode** - Workers downloading/uploading raw files - **NEXT PRIORITY**
 8. **Worker Failover** - Automatic reassignment on worker failure
-9. **Disc Name Cleanup** - Auto-detect disc as TV show vs movie
+9. ~~**Disc Name Cleanup**~~ - **IMPLEMENTED** (auto-detect TV vs movie with TheTVDB)
 10. **Plex Integration** - Trigger library scan after organize
+11. **File Organization** - Auto-organize to network shares (partial)
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:

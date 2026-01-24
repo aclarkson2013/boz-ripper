@@ -57,5 +57,9 @@ class Settings(BaseSettings):
     extras_duration_variance: float = 0.4  # 40% - titles with >40% duration variance from median are likely extras
     auto_approve_previews: bool = False  # Auto-approve previews (bypass manual approval)
 
+    # Database settings
+    database_url: Optional[str] = None  # SQLite database URL (default: sqlite+aiosqlite:////data/database/boz_ripper.db)
+    database_echo: bool = False  # Enable SQL query logging for debugging
+
 
 settings = Settings()
