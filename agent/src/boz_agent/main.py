@@ -16,7 +16,6 @@ from boz_agent.services.disc_detector import DiscDetector
 from boz_agent.services.job_runner import JobRunner
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
-from boz_agent.services.thumbnail_extractor import ThumbnailExtractor
 
 app = typer.Typer(
     name="boz-agent",
@@ -37,7 +36,6 @@ class Agent:
         # Initialize services
         self.server_client = ServerClient(settings.server)
         self.makemkv = MakeMKVService(settings.makemkv)
-        self.thumbnail_extractor = ThumbnailExtractor(settings.thumbnails)
         self.disc_detector = DiscDetector(
             settings.disc_detection,
             on_disc_inserted=self.handle_disc_inserted,
