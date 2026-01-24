@@ -15,7 +15,7 @@ async def register_agent(
     _: ApiKeyDep,
 ) -> Agent:
     """Register a new agent or reconnect an existing one."""
-    agent = agent_manager.register(
+    agent = await agent_manager.register(
         agent_id=request.agent_id,
         name=request.name,
         capabilities=request.capabilities,
@@ -30,7 +30,7 @@ async def unregister_agent(
     _: ApiKeyDep,
 ) -> dict:
     """Unregister an agent."""
-    if agent_manager.unregister(agent_id):
+    if await agent_manager.unregister(agent_id):
         return {"status": "ok", "message": "Agent unregistered"}
     raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -42,7 +42,7 @@ async def agent_heartbeat(
     _: ApiKeyDep,
 ) -> dict:
     """Update agent heartbeat."""
-    if agent_manager.heartbeat(agent_id):
+    if await agent_manager.heartbeat(agent_id):
         return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -52,7 +52,7 @@ async def list_agents(
     agent_manager: AgentManagerDep,
 ) -> list[Agent]:
     """List all registered agents."""
-    return agent_manager.get_all()
+    return await agent_manager.get_all()
 
 
 @router.get("/{agent_id}", response_model=Agent)
@@ -61,7 +61,7 @@ async def get_agent(
     agent_manager: AgentManagerDep,
 ) -> Agent:
     """Get a specific agent."""
-    agent = agent_manager.get(agent_id)
+    agent = await agent_manager.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent
@@ -75,9 +75,9 @@ async def get_agent_jobs(
     _: ApiKeyDep,
 ) -> dict:
     """Get jobs assigned to an agent."""
-    agent = agent_manager.get(agent_id)
+    agent = await agent_manager.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    jobs = job_queue.get_jobs_for_agent(agent_id)
+    jobs = await job_queue.get_jobs_for_agent(agent_id)
     return {"jobs": [j.model_dump() for j in jobs]}

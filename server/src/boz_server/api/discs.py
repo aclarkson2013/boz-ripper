@@ -45,13 +45,13 @@ async def disc_detected(
     logger.info(f"========================================")
 
     # Verify agent exists
-    agent = agent_manager.get(request.agent_id)
+    agent = await agent_manager.get(request.agent_id)
     if not agent:
         logger.error(f"Agent not found: {request.agent_id}")
         raise HTTPException(status_code=404, detail="Agent not found")
 
     # Check if we already have this disc
-    existing = job_queue.get_disc_by_agent_drive(request.agent_id, request.drive)
+    existing = await job_queue.get_disc_by_agent_drive(request.agent_id, request.drive)
     if existing:
         # Update existing disc
         logger.info(f"Updating existing disc: {existing.disc_id}")
@@ -88,7 +88,7 @@ async def disc_detected(
     disc = await preview_generator.generate_preview(disc)
     logger.info(f"Preview generation complete, adding to queue")
 
-    job_queue.add_disc(disc)
+    await job_queue.add_disc(disc)
     logger.info(f"Disc added to queue, returning response")
     return disc
 
@@ -102,9 +102,9 @@ async def disc_ejected(
 ) -> dict:
     """Report a disc ejection from an agent."""
     # Find the disc
-    disc = job_queue.get_disc_by_agent_drive(request.agent_id, request.drive)
+    disc = await job_queue.get_disc_by_agent_drive(request.agent_id, request.drive)
     if disc:
-        job_queue.remove_disc(disc.disc_id)
+        await job_queue.remove_disc(disc.disc_id)
         return {"status": "ok", "disc_id": disc.disc_id}
 
     return {"status": "ok", "message": "No disc found for that drive"}
@@ -115,7 +115,7 @@ async def list_discs(
     job_queue: JobQueueDep,
 ) -> list[Disc]:
     """List all tracked discs."""
-    return job_queue.get_all_discs()
+    return await job_queue.get_all_discs()
 
 
 @router.get("/{disc_id}", response_model=Disc)
@@ -124,7 +124,7 @@ async def get_disc(
     job_queue: JobQueueDep,
 ) -> Disc:
     """Get a specific disc."""
-    disc = job_queue.get_disc(disc_id)
+    disc = await job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
     return disc
@@ -144,7 +144,7 @@ async def approve_preview(
     _: ApiKeyDep = None,
 ) -> Disc:
     """Approve disc preview and optionally apply user edits."""
-    disc = job_queue.get_disc(disc_id)
+    disc = await job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
 
@@ -178,7 +178,7 @@ async def reject_preview(
     _: ApiKeyDep = None,
 ) -> Disc:
     """Reject disc preview and block ripping."""
-    disc = job_queue.get_disc(disc_id)
+    disc = await job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
 
@@ -199,7 +199,7 @@ async def update_season_and_episode(
     _: ApiKeyDep = None,
 ) -> Disc:
     """Update season and starting episode, then regenerate preview."""
-    disc = job_queue.get_disc(disc_id)
+    disc = await job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
 
@@ -213,7 +213,7 @@ async def update_season_and_episode(
 
     # Get or create the new season tracker
     if disc.tv_show_name:
-        tv_season = preview_generator.get_or_create_season(
+        tv_season = await preview_generator.get_or_create_season(
             disc.tv_show_name,
             request.season_number
         )
@@ -263,7 +263,7 @@ async def get_tv_season(
     preview_generator: PreviewGeneratorDep,
 ) -> TVSeason:
     """Get TV season tracking information."""
-    season = preview_generator.get_season(season_id)
+    season = await preview_generator.get_season(season_id)
     if not season:
         raise HTTPException(status_code=404, detail="TV season not found")
     return season
@@ -277,7 +277,7 @@ async def start_rip(
     _: ApiKeyDep = None,
 ) -> dict:
     """Start ripping selected titles from a disc."""
-    disc = job_queue.get_disc(disc_id)
+    disc = await job_queue.get_disc(disc_id)
     if not disc:
         raise HTTPException(status_code=404, detail="Disc not found")
 
@@ -317,9 +317,9 @@ async def start_rip(
         else:
             output_name = f"{disc.disc_name}_t{title.index:02d}"
 
-        job = job_queue.create_rip_job(disc, title, output_name)
+        job = await job_queue.create_rip_job(disc, title, output_name)
         # Auto-assign to the agent that reported this disc
-        job_queue.assign_job(job.job_id, disc.agent_id)
+        await job_queue.assign_job(job.job_id, disc.agent_id)
         jobs.append(job)
 
     disc.status = "ripping"

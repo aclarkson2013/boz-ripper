@@ -15,7 +15,7 @@ async def create_job(
     _: ApiKeyDep,
 ) -> Job:
     """Create a new job."""
-    return job_queue.create_job(request)
+    return await job_queue.create_job(request)
 
 
 @router.get("", response_model=list[Job])
@@ -24,7 +24,7 @@ async def list_jobs(
     status: JobStatus | None = None,
 ) -> list[Job]:
     """List all jobs, optionally filtered by status."""
-    jobs = job_queue.get_all_jobs()
+    jobs = await job_queue.get_all_jobs()
     if status:
         jobs = [j for j in jobs if j.status == status]
     return jobs
@@ -35,7 +35,7 @@ async def get_queue_stats(
     job_queue: JobQueueDep,
 ) -> dict:
     """Get job queue statistics."""
-    return job_queue.get_queue_stats()
+    return await job_queue.get_queue_stats()
 
 
 @router.get("/pending")
@@ -43,7 +43,7 @@ async def get_pending_jobs(
     job_queue: JobQueueDep,
 ) -> list[Job]:
     """Get all pending jobs in priority order."""
-    return job_queue.get_pending_jobs()
+    return await job_queue.get_pending_jobs()
 
 
 @router.get("/awaiting-approval", response_model=list[Job])
@@ -51,7 +51,7 @@ async def get_jobs_awaiting_approval(
     job_queue: JobQueueDep,
 ) -> list[Job]:
     """Get transcode jobs awaiting user approval."""
-    return job_queue.get_jobs_awaiting_approval()
+    return await job_queue.get_jobs_awaiting_approval()
 
 
 @router.get("/upload-errors", response_model=list[Job])
@@ -59,7 +59,7 @@ async def get_jobs_with_upload_errors(
     job_queue: JobQueueDep,
 ) -> list[Job]:
     """Get completed jobs that have upload errors."""
-    jobs = job_queue.get_all_jobs()
+    jobs = await job_queue.get_all_jobs()
     return [
         j for j in jobs
         if j.status == JobStatus.COMPLETED
@@ -92,7 +92,7 @@ async def get_job(
     job_queue: JobQueueDep,
 ) -> Job:
     """Get a specific job."""
-    job = job_queue.get_job(job_id)
+    job = await job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
@@ -107,14 +107,14 @@ async def update_job(
     _: ApiKeyDep,
 ) -> Job:
     """Update a job's status."""
-    job = job_queue.update_job(job_id, update)
+    job = await job_queue.update_job(job_id, update)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     # If job completed or failed, release the agent
     if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
         if job.assigned_agent_id:
-            agent_manager.complete_job(job.assigned_agent_id)
+            await agent_manager.complete_job(job.assigned_agent_id)
 
     return job
 
@@ -128,21 +128,21 @@ async def assign_job(
     _: ApiKeyDep,
 ) -> dict:
     """Manually assign a job to an agent."""
-    job = job_queue.get_job(job_id)
+    job = await job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    agent = agent_manager.get(agent_id)
+    agent = await agent_manager.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     if not agent.is_available():
         raise HTTPException(status_code=400, detail="Agent not available")
 
-    if not job_queue.assign_job(job_id, agent_id):
+    if not await job_queue.assign_job(job_id, agent_id):
         raise HTTPException(status_code=400, detail="Failed to assign job")
 
-    agent_manager.assign_job(agent_id, job_id)
+    await agent_manager.assign_job(agent_id, job_id)
 
     return {"status": "ok", "job_id": job_id, "agent_id": agent_id}
 
@@ -155,7 +155,7 @@ async def cancel_job(
     _: ApiKeyDep,
 ) -> dict:
     """Cancel a job."""
-    job = job_queue.get_job(job_id)
+    job = await job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -163,11 +163,11 @@ async def cancel_job(
         raise HTTPException(status_code=400, detail="Job already finished")
 
     update = JobUpdate(status=JobStatus.CANCELLED)
-    job_queue.update_job(job_id, update)
+    await job_queue.update_job(job_id, update)
 
     # Release agent if assigned
     if job.assigned_agent_id:
-        agent_manager.complete_job(job.assigned_agent_id)
+        await agent_manager.complete_job(job.assigned_agent_id)
 
     return {"status": "ok", "job_id": job_id}
 
@@ -182,7 +182,7 @@ async def approve_job(
     _: ApiKeyDep,
 ) -> dict:
     """Approve a pending transcode job with worker and preset selection."""
-    job = job_queue.get_job(job_id)
+    job = await job_queue.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -193,7 +193,7 @@ async def approve_job(
         raise HTTPException(status_code=400, detail="Job is not pending")
 
     # Validate worker exists
-    worker = worker_manager.get(request.worker_id)
+    worker = await worker_manager.get(request.worker_id)
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
 
@@ -202,14 +202,14 @@ async def approve_job(
     agent_id = worker.agent_id or request.worker_id
 
     # Approve and assign to the agent
-    approved_job = job_queue.approve_job(job_id, agent_id, request.preset)
+    approved_job = await job_queue.approve_job(job_id, agent_id, request.preset)
     if not approved_job:
         raise HTTPException(status_code=400, detail="Failed to approve job")
 
     # Mark agent as having a job (if the agent exists)
-    agent = agent_manager.get(agent_id)
+    agent = await agent_manager.get(agent_id)
     if agent:
-        agent_manager.assign_job(agent_id, job_id)
+        await agent_manager.assign_job(agent_id, job_id)
 
     return {
         "status": "ok",
