@@ -130,6 +130,8 @@ class TVSeasonRepository(BaseRepository[TVSeasonORM]):
                 season_number=season_number,
             )
             season_orm = await self.create_from_pydantic(season)
+            # Refresh to eagerly load episodes
+            season_orm = await self.get_with_episodes(season_id)
             return self.to_pydantic(season_orm)
 
     async def update_last_episode_assigned(
