@@ -169,8 +169,21 @@ class JobRunner:
             progress_callback=on_progress,
         )
 
-        logger.info("rip_completed", job_id=job_id, output_file=str(output_file))
 
+        logger.info("rip_completed", job_id=job_id, makemkv_output=str(output_file))
+
+        # Rename the file to match our desired output_name
+        # MakeMKV creates its own filename (e.g., G2_t05.mkv), we need to rename it
+        desired_filename = f"{output_name}.mkv"
+        desired_path = output_dir / desired_filename
+        
+        if output_file != desired_path:
+            logger.info("renaming_output", from_file=str(output_file), to_file=str(desired_path))
+            output_file.rename(desired_path)
+            output_file = desired_path
+            logger.info("file_renamed", final_path=str(output_file))
+        
+        logger.info("rip_finalized", job_id=job_id, output_file=str(output_file))
         # Update job with output file path
         await self.server_client.update_job_status(
             job_id, "completed", progress=100, output_file=str(output_file)
