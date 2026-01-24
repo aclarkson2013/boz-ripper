@@ -43,6 +43,10 @@ class JobCreate(BaseModel):
     source_disc_name: Optional[str] = None
     input_file_size: Optional[int] = None
 
+    # Stage 2 post-rip thumbnails for visual verification
+    thumbnails: list[str] = []  # Base64-encoded JPEG images
+    thumbnail_timestamps: list[int] = []  # Timestamps in seconds
+
 
 class JobApprovalRequest(BaseModel):
     """Request to approve a pending transcode job."""
@@ -86,6 +90,10 @@ class Job(BaseModel):
     requires_approval: bool = False
     source_disc_name: Optional[str] = None
     input_file_size: Optional[int] = None
+
+    # Stage 2 post-rip thumbnails for visual verification
+    thumbnails: list[str] = []  # URLs to thumbnail images
+    thumbnail_timestamps: list[int] = []  # Timestamps in seconds
 
     # Progress tracking
     progress: float = 0.0

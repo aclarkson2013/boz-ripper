@@ -9,6 +9,72 @@ Extracted from PRD v2.1 (January 18, 2026)
 
 ---
 
+## 🚨 CRITICAL ISSUES (P0 - Must Fix First)
+
+| ID | Issue | Description | Status |
+|----|-------|-------------|--------|
+| C1 | Movie Detection & Title Matching | Movies have poor detection/naming. Disc labels are often vague ("MOVIE", studio codes). Need OMDb/TMDb integration to match disc names to actual movie titles and generate proper filenames like "The Dark Knight (2008).mkv". Improve TV vs Movie heuristics using track count, duration patterns, and disc structure. | [x] |
+| C2 | Video Preview/Verification | Two-stage preview system: Stage 2 (post-rip FFmpeg thumbnails from MKV files) is critical for verifying episode-to-title mapping before transcoding. Stage 1 (pre-rip VLC thumbnails from encrypted disc) is a future enhancement. | [~] |
+
+### C1 - Movie Detection Implementation Plan [COMPLETE ✅]
+- [x] Improve TV vs Movie heuristics (track count, duration patterns, disc structure)
+- [x] Add OMDb API integration (API key configured)
+- [x] Implement fuzzy search for disc names that don't match exactly
+- [x] Fall back to user confirmation if confidence < 80%
+- [x] Generate proper movie filenames: "Movie Title (Year).mkv"
+
+### C2 - Video Preview Implementation Plan (Two-Stage System)
+
+**Problem:** FFmpeg cannot read encrypted DVDs directly (error code 4294967294). Only MakeMKV can decrypt protected content.
+
+**Solution:** Two-stage preview system that provides visual verification at both pre-rip and pre-transcode stages.
+
+#### Stage 2: Post-Rip Preview (PRIORITY - Implement First) [IN PROGRESS]
+**When:** After ripping completes, before user approves transcode
+**Goal:** Detailed visual verification with episode name matching
+**Method:** FFmpeg extracts 4 thumbnails per ripped MKV file
+
+- [~] Extract thumbnails from ripped MKV files in staging directory
+- [ ] Send thumbnails to server with rip completion notification
+- [ ] Display 2x2 thumbnail grid in transcode approval modal
+- [ ] Add file renaming capability if episode detection was wrong
+- [ ] Add episode number adjustment UI for TV shows
+- [ ] Clean up thumbnails after transcode approval/rejection
+
+**FFmpeg Command:**
+```bash
+ffmpeg -ss <timestamp> -i <ripped_mkv_file> -frames:v 1 -q:v 2 -vf scale=320:-1 -y thumb.jpg
+```
+
+**Timestamps:** 0:30, 2:00, 5:00, 50% through
+
+#### Stage 1: Initial Preview (FUTURE ENHANCEMENT)
+**When:** During disc detection, before user approves rip
+**Goal:** Quick visual confirmation to help user select which titles to rip
+**Method:** VLC headless mode extracts 1 thumbnail per title from encrypted DVD
+
+- [ ] Use VLC to extract single frame at 30 seconds per title
+- [ ] Display thumbnail in initial preview page
+- [ ] Fallback gracefully if VLC not available
+
+**VLC Command (Windows):**
+```bash
+vlc dvd:///I:/#<title_index> --video-filter=scene --scene-format=jpg --scene-ratio=1 --run-time=30 --play-and-exit
+```
+
+#### Why Two Stages?
+| Stage | Purpose | Thumbnails | Works On |
+|-------|---------|------------|----------|
+| Stage 1 (Pre-Rip) | Quick title selection | 1 per title | Encrypted DVD (VLC) |
+| Stage 2 (Post-Rip) | Episode verification | 4 per title | Ripped MKV (FFmpeg) |
+
+Stage 2 is critical because:
+- Prevents wasting 20+ minute transcode on mismatched content
+- Works perfectly with unencrypted MKV files
+- Allows user to fix episode names/numbers before committing
+
+---
+
 ## 1. Agent Requirements
 
 | ID | Requirement | Priority | Status |
@@ -125,6 +191,9 @@ Tracks matching these patterns should be flagged as extras:
 | TA5 | Approval modal with worker/preset selection | P0 | [x] |
 | TA6 | Show file size and source disc name | P1 | [x] |
 | TA7 | Show upload errors for manual retry | P1 | [x] |
+| TA8 | Display 2x2 thumbnail grid per job (Stage 2 preview) | P0 | [ ] |
+| TA9 | Allow file renaming before transcode | P1 | [ ] |
+| TA10 | Allow episode number adjustment (TV shows) | P1 | [ ] |
 
 ---
 
@@ -345,17 +414,27 @@ workers:
 - Upload with retry logic and error visibility
 
 ### What's Missing for PRD Compliance:
-1. ~~**Worker System**~~ - **IMPLEMENTED** (agents register as workers)
-2. ~~**SQLite Database**~~ - **IMPLEMENTED** (Phase 4 complete - persistent storage)
-3. ~~**Rip Preview/Approval**~~ - **IMPLEMENTED** (Phase 3 complete)
-4. ~~**TV Show Intelligence**~~ - **IMPLEMENTED** (TheTVDB integration, episode matching, multi-disc tracking)
-5. ~~**HandBrake Integration**~~ - **IMPLEMENTED** (local transcode working)
-6. ~~**Worker Assignment**~~ - **IMPLEMENTED** (priority-based via approval)
-7. **Remote Transcode Mode** - Workers downloading/uploading raw files - **NEXT PRIORITY**
-8. **Worker Failover** - Automatic reassignment on worker failure
+
+**🚨 CRITICAL (Fix First):**
+1. ~~**Movie Detection & Matching**~~ - **COMPLETE** (OMDb integration working)
+2. **Video Preview/Verification** - **IN PROGRESS** (Two-stage system: Stage 2 post-rip thumbnails priority)
+
+**Previously Completed:**
+3. ~~**Worker System**~~ - **IMPLEMENTED** (agents register as workers)
+4. ~~**SQLite Database**~~ - **IMPLEMENTED** (Phase 4 complete - persistent storage)
+5. ~~**Rip Preview/Approval**~~ - **IMPLEMENTED** (Phase 3 complete)
+6. ~~**TV Show Intelligence**~~ - **IMPLEMENTED** (TheTVDB integration, episode matching, multi-disc tracking)
+7. ~~**HandBrake Integration**~~ - **IMPLEMENTED** (local transcode working)
+8. ~~**Worker Assignment**~~ - **IMPLEMENTED** (priority-based via approval)
 9. ~~**Disc Name Cleanup**~~ - **IMPLEMENTED** (auto-detect TV vs movie with TheTVDB)
-10. **Plex Integration** - Trigger library scan after organize
-11. **File Organization** - Auto-organize to network shares (partial)
+
+**Still Needed:**
+10. **Remote Transcode Mode** - Workers downloading/uploading raw files
+11. **Worker Failover** - Automatic reassignment on worker failure
+12. **Plex Integration** - Trigger library scan after organize
+13. **File Organization** - Auto-organize to network shares (partial)
+14. **Staging Cleanup** - Delete temp files after upload
+15. **Auto-eject** - Eject disc on completion
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:
@@ -365,4 +444,4 @@ PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate con
 
 ---
 
-*Last Updated: January 23, 2026*
+*Last Updated: January 24, 2026*

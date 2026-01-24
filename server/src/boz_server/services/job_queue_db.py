@@ -251,3 +251,18 @@ class JobQueue:
                 await session.commit()
                 logger.info(f"Job {job_id} approved: agent={agent_id}, preset={preset}")
             return job
+
+    async def update_job_thumbnails(
+        self,
+        job_id: str,
+        thumbnail_urls: list[str],
+        thumbnail_timestamps: list[int],
+    ) -> Optional[Job]:
+        """Update a job's thumbnail URLs after storage."""
+        async with await self._get_session() as session:
+            repo = JobRepository(session)
+            job = await repo.update_thumbnails(job_id, thumbnail_urls, thumbnail_timestamps)
+            if job:
+                await session.commit()
+                logger.info(f"Job {job_id} thumbnails updated: {len(thumbnail_urls)} images")
+            return job

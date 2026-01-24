@@ -45,6 +45,8 @@ class JobRepository(BaseRepository[JobORM]):
             requires_approval=job.requires_approval,
             source_disc_name=job.source_disc_name,
             input_file_size=job.input_file_size,
+            thumbnails_json=json.dumps(job.thumbnails) if job.thumbnails else None,
+            thumbnail_timestamps_json=json.dumps(job.thumbnail_timestamps) if job.thumbnail_timestamps else None,
             progress=job.progress,
             error=job.error,
             created_at=job.created_at,
@@ -63,6 +65,20 @@ class JobRepository(BaseRepository[JobORM]):
         Returns:
             Pydantic Job model
         """
+        # Parse thumbnail JSON fields
+        thumbnails = []
+        thumbnail_timestamps = []
+        if job_orm.thumbnails_json:
+            try:
+                thumbnails = json.loads(job_orm.thumbnails_json)
+            except json.JSONDecodeError:
+                pass
+        if job_orm.thumbnail_timestamps_json:
+            try:
+                thumbnail_timestamps = json.loads(job_orm.thumbnail_timestamps_json)
+            except json.JSONDecodeError:
+                pass
+
         return Job(
             job_id=job_orm.job_id,
             job_type=JobType(job_orm.job_type),
@@ -79,6 +95,8 @@ class JobRepository(BaseRepository[JobORM]):
             requires_approval=job_orm.requires_approval,
             source_disc_name=job_orm.source_disc_name,
             input_file_size=job_orm.input_file_size,
+            thumbnails=thumbnails,
+            thumbnail_timestamps=thumbnail_timestamps,
             progress=job_orm.progress,
             error=job_orm.error,
             created_at=job_orm.created_at,
@@ -254,6 +272,34 @@ class JobRepository(BaseRepository[JobORM]):
         job_orm.requires_approval = False
         job_orm.status = JobStatus.ASSIGNED.value
         job_orm.assigned_at = datetime.utcnow()
+
+        await self.session.flush()
+        await self.session.refresh(job_orm)
+        return self.to_pydantic(job_orm)
+
+    async def update_thumbnails(
+        self,
+        job_id: str,
+        thumbnail_urls: list[str],
+        thumbnail_timestamps: list[int],
+    ) -> Optional[Job]:
+        """
+        Update job's thumbnail URLs after storage.
+
+        Args:
+            job_id: Job ID
+            thumbnail_urls: List of thumbnail URLs
+            thumbnail_timestamps: List of timestamps in seconds
+
+        Returns:
+            Updated job or None if not found
+        """
+        job_orm = await self.get(job_id)
+        if not job_orm:
+            return None
+
+        job_orm.thumbnails_json = json.dumps(thumbnail_urls)
+        job_orm.thumbnail_timestamps_json = json.dumps(thumbnail_timestamps)
 
         await self.session.flush()
         await self.session.refresh(job_orm)

@@ -114,44 +114,13 @@ class Agent:
             analysis.disc_name = disc_info["name"]
             logger.info("using_volume_name", disc_name=analysis.disc_name)
 
-        # Extract thumbnails for preview verification
-        thumbnails = None
-        if self.settings.thumbnails.enabled and self.thumbnail_extractor.is_available():
-            logger.info("extracting_thumbnails", drive=drive, title_count=len(analysis.titles))
-            try:
-                # Build title list for thumbnail extraction
-                title_list = [
-                    {"index": t.index, "duration_seconds": t.duration_seconds}
-                    for t in analysis.titles
-                ]
-                # Extract thumbnails for all titles
-                results = await self.thumbnail_extractor.extract_all_titles(
-                    drive=drive,
-                    titles=title_list,
-                    disc_type=analysis.disc_type,
-                )
-                # Convert to dict mapping title_index -> (images, timestamps)
-                thumbnails = {
-                    r.title_index: (r.thumbnails, r.timestamps)
-                    for r in results
-                    if r.thumbnails  # Only include titles with successful extractions
-                }
-                total_thumbs = sum(len(t[0]) for t in thumbnails.values())
-                logger.info(
-                    "thumbnails_extracted",
-                    total=total_thumbs,
-                    titles_with_thumbs=len(thumbnails),
-                )
-            except Exception as e:
-                logger.warning("thumbnail_extraction_failed", error=str(e))
-                thumbnails = None
-        elif not self.settings.thumbnails.enabled:
-            logger.debug("thumbnail_extraction_disabled")
-        else:
-            logger.warning("ffmpeg_not_available_for_thumbnails")
+        # NOTE: Stage 1 thumbnail extraction (pre-rip) is disabled because
+        # FFmpeg cannot read encrypted DVDs. Thumbnails are extracted in Stage 2
+        # (post-rip) from the ripped MKV files. Stage 1 with VLC is a future enhancement.
+        # See REQUIREMENTS.md section C2 for details.
 
-        # Report to server (with thumbnails if available)
-        await self.server_client.report_disc(drive, analysis, thumbnails=thumbnails)
+        # Report to server (no thumbnails at this stage)
+        await self.server_client.report_disc(drive, analysis)
 
     async def handle_disc_ejected(self, drive: str) -> None:
         """Handle a disc ejection event."""

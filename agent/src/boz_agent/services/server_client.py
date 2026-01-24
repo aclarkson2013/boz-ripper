@@ -263,6 +263,8 @@ class ServerClient:
         requires_approval: bool = True,
         source_disc_name: Optional[str] = None,
         input_file_size: Optional[int] = None,
+        thumbnails: Optional[list[str]] = None,
+        thumbnail_timestamps: Optional[list[int]] = None,
     ) -> Optional[dict]:
         """Create a transcode job on the server.
 
@@ -273,6 +275,8 @@ class ServerClient:
             requires_approval: Whether job needs user approval before starting
             source_disc_name: Name of the source disc for display
             input_file_size: Size of input file in bytes
+            thumbnails: Base64-encoded thumbnail images for Stage 2 preview
+            thumbnail_timestamps: Timestamps where thumbnails were extracted
 
         Returns:
             Created job dict or None if failed
@@ -287,12 +291,23 @@ class ServerClient:
             "input_file_size": input_file_size,
         }
 
+        # Add thumbnails if available (Stage 2 post-rip preview)
+        if thumbnails:
+            payload["thumbnails"] = thumbnails
+            payload["thumbnail_timestamps"] = thumbnail_timestamps or []
+            logger.debug("including_thumbnails_in_job", count=len(thumbnails))
+
         try:
             client = await self._get_client()
             response = await client.post("/api/jobs", json=payload)
             response.raise_for_status()
             job = response.json()
-            logger.info("transcode_job_created", job_id=job.get("job_id"), requires_approval=requires_approval)
+            logger.info(
+                "transcode_job_created",
+                job_id=job.get("job_id"),
+                requires_approval=requires_approval,
+                has_thumbnails=bool(thumbnails),
+            )
             return job
         except Exception as e:
             logger.error("create_transcode_job_failed", error=str(e))

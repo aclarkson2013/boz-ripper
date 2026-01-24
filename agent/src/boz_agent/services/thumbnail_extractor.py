@@ -373,6 +373,219 @@ class ThumbnailExtractor:
 
         return results
 
+    async def extract_from_mkv(
+        self,
+        mkv_path: Path,
+        title_index: int = 0,
+    ) -> TitleThumbnails:
+        """
+        Extract thumbnails from a ripped MKV file (Stage 2 - Post-Rip Preview).
+
+        This works perfectly because MKV files are unencrypted.
+
+        Args:
+            mkv_path: Path to the MKV file
+            title_index: Title index for reference
+
+        Returns:
+            TitleThumbnails with 4 extracted images
+        """
+        if not self.config.enabled:
+            logger.debug("thumbnail_extraction_disabled")
+            return TitleThumbnails(
+                title_index=title_index,
+                thumbnails=[],
+                timestamps=[],
+                errors=["Thumbnail extraction disabled"],
+            )
+
+        if not self.is_available():
+            logger.warning("ffmpeg_not_available")
+            return TitleThumbnails(
+                title_index=title_index,
+                thumbnails=[],
+                timestamps=[],
+                errors=["FFmpeg not available"],
+            )
+
+        if not mkv_path.exists():
+            logger.error("mkv_file_not_found", path=str(mkv_path))
+            return TitleThumbnails(
+                title_index=title_index,
+                thumbnails=[],
+                timestamps=[],
+                errors=[f"MKV file not found: {mkv_path}"],
+            )
+
+        # Get video duration using ffprobe
+        duration_seconds = await self._get_video_duration(mkv_path)
+        if duration_seconds <= 0:
+            logger.warning("could_not_determine_duration", path=str(mkv_path))
+            duration_seconds = 7200  # Fallback to 2 hours
+
+        # Calculate timestamps to extract
+        timestamps = list(self.config.timestamps)
+        if self.config.extract_midpoint:
+            midpoint = duration_seconds // 2
+            if midpoint not in timestamps and midpoint > 0:
+                timestamps.append(midpoint)
+        timestamps.sort()
+
+        # Filter out timestamps that exceed duration
+        timestamps = [t for t in timestamps if t < duration_seconds - 5]
+
+        if not timestamps:
+            # If all timestamps exceed duration, use 10% and 50% of duration
+            timestamps = [
+                max(5, duration_seconds // 10),
+                max(10, duration_seconds // 2),
+            ]
+
+        logger.info(
+            "extracting_thumbnails_from_mkv",
+            path=str(mkv_path),
+            duration=duration_seconds,
+            timestamps=timestamps,
+        )
+
+        thumbnails = []
+        extracted_timestamps = []
+        errors = []
+
+        for timestamp in timestamps:
+            try:
+                thumbnail_data = await self._extract_frame_from_file(
+                    mkv_path, timestamp, title_index
+                )
+                if thumbnail_data:
+                    thumbnails.append(thumbnail_data)
+                    extracted_timestamps.append(timestamp)
+                else:
+                    errors.append(f"Failed to extract frame at {timestamp}s")
+            except Exception as e:
+                logger.warning(
+                    "thumbnail_extraction_error",
+                    timestamp=timestamp,
+                    error=str(e),
+                )
+                errors.append(f"Error at {timestamp}s: {str(e)}")
+
+        logger.info(
+            "mkv_thumbnails_extracted",
+            path=str(mkv_path),
+            count=len(thumbnails),
+            errors=len(errors),
+        )
+
+        return TitleThumbnails(
+            title_index=title_index,
+            thumbnails=thumbnails,
+            timestamps=extracted_timestamps,
+            errors=errors,
+        )
+
+    async def _get_video_duration(self, video_path: Path) -> int:
+        """Get video duration in seconds using ffprobe."""
+        try:
+            # Use ffprobe to get duration
+            ffprobe = self._ffmpeg.replace("ffmpeg", "ffprobe")
+            cmd = [
+                ffprobe,
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                **_get_subprocess_flags(),
+            )
+
+            stdout, _ = await asyncio.wait_for(
+                process.communicate(),
+                timeout=30,
+            )
+
+            duration_str = stdout.decode().strip()
+            return int(float(duration_str))
+        except Exception as e:
+            logger.warning("ffprobe_duration_failed", error=str(e))
+            return 0
+
+    async def _extract_frame_from_file(
+        self,
+        video_path: Path,
+        timestamp: int,
+        title_index: int,
+    ) -> Optional[str]:
+        """
+        Extract a single frame from a video file at the given timestamp.
+
+        Returns:
+            Base64-encoded JPEG image or None on failure
+        """
+        # Create temp file for output
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
+        output_file = self._temp_dir / f"thumb_{title_index}_{timestamp}.jpg"
+
+        # Build FFmpeg command - simple extraction from file
+        cmd = [
+            self._ffmpeg,
+            "-ss", str(timestamp),
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-q:v", str(self.config.quality),
+            "-vf", f"scale={self.config.width}:-1",
+            "-y",
+            str(output_file),
+        ]
+
+        logger.debug("ffmpeg_mkv_command", cmd=" ".join(cmd))
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                **_get_subprocess_flags(),
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=self.config.timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("ffmpeg_timeout", timestamp=timestamp)
+                process.kill()
+                await process.wait()
+                return None
+
+            if process.returncode != 0:
+                logger.debug(
+                    "ffmpeg_failed",
+                    returncode=process.returncode,
+                    stderr=stderr.decode("utf-8", errors="replace")[:500],
+                )
+                return None
+
+            # Read and encode the thumbnail
+            if output_file.exists():
+                with open(output_file, "rb") as f:
+                    image_data = f.read()
+                # Clean up
+                output_file.unlink()
+                return base64.b64encode(image_data).decode("ascii")
+
+            return None
+
+        except Exception as e:
+            logger.error("ffmpeg_exception", error=str(e))
+            return None
+
     def cleanup(self) -> None:
         """Clean up temporary thumbnail files."""
         if self._temp_dir.exists():

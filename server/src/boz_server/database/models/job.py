@@ -41,6 +41,10 @@ class JobORM(Base):
     source_disc_name: Mapped[Optional[str]] = mapped_column(String(255))
     input_file_size: Mapped[Optional[int]] = mapped_column(BigInteger)
 
+    # Stage 2 post-rip thumbnails (stored as JSON strings)
+    thumbnails_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of URLs
+    thumbnail_timestamps_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of ints
+
     # Progress tracking
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     error: Mapped[Optional[str]] = mapped_column(Text)

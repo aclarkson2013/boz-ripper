@@ -9,6 +9,7 @@ import structlog
 from boz_agent.core.config import Settings
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
+from boz_agent.services.thumbnail_extractor import ThumbnailExtractor
 from boz_agent.services.worker import WorkerService, TranscodeJob
 
 logger = structlog.get_logger()
@@ -26,6 +27,9 @@ class JobRunner:
         self.settings = settings
         self.server_client = server_client
         self.makemkv = makemkv
+
+        # Thumbnail extractor for Stage 2 post-rip preview
+        self.thumbnail_extractor = ThumbnailExtractor(settings.thumbnails)
 
         # Worker for transcoding (if enabled)
         self.worker: Optional[WorkerService] = None
@@ -207,6 +211,34 @@ class JobRunner:
                 job_id, "completed", progress=100, output_file=str(output_file)
             )
 
+            # Stage 2: Extract thumbnails from ripped MKV for visual verification
+            thumbnails = None
+            thumbnail_timestamps = None
+            if self.settings.thumbnails.enabled and self.thumbnail_extractor.is_available():
+                logger.info("extracting_post_rip_thumbnails", file=str(output_file))
+                try:
+                    thumb_result = await self.thumbnail_extractor.extract_from_mkv(
+                        output_file,
+                        title_index=title_index,
+                    )
+                    if thumb_result.thumbnails:
+                        thumbnails = thumb_result.thumbnails
+                        thumbnail_timestamps = thumb_result.timestamps
+                        logger.info(
+                            "post_rip_thumbnails_extracted",
+                            count=len(thumbnails),
+                            timestamps=thumbnail_timestamps,
+                        )
+                    else:
+                        logger.warning(
+                            "post_rip_thumbnail_extraction_failed",
+                            errors=thumb_result.errors,
+                        )
+                except Exception as e:
+                    logger.warning("post_rip_thumbnail_error", error=str(e))
+            else:
+                logger.debug("post_rip_thumbnails_skipped", reason="disabled or ffmpeg unavailable")
+
             # Queue transcode job for user approval (no auto-assignment)
             logger.info("queuing_transcode_for_approval", input_file=str(output_file))
 
@@ -221,6 +253,8 @@ class JobRunner:
                 requires_approval=True,
                 source_disc_name=disc.get("disc_name", output_name),
                 input_file_size=file_size,
+                thumbnails=thumbnails,
+                thumbnail_timestamps=thumbnail_timestamps,
             )
             if transcode_job:
                 logger.info("transcode_job_queued_for_approval", job_id=transcode_job.get("job_id"))

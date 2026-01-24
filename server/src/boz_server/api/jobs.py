@@ -1,9 +1,13 @@
 """Job management API endpoints."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
-from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, WorkerManagerDep
+from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, ThumbnailStorageDep, WorkerManagerDep
 from boz_server.models.job import Job, JobApprovalRequest, JobCreate, JobStatus, JobUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -12,10 +16,34 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 async def create_job(
     request: JobCreate,
     job_queue: JobQueueDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep,
 ) -> Job:
     """Create a new job."""
-    return await job_queue.create_job(request)
+    # Create the job first to get the job_id
+    job = await job_queue.create_job(request)
+
+    # If thumbnails were provided (Stage 2 post-rip preview), store them
+    if request.thumbnails:
+        logger.info(f"Processing {len(request.thumbnails)} thumbnails for job {job.job_id}")
+        try:
+            # Store thumbnails using job_id as the directory
+            thumbnail_urls = thumbnail_storage.save_thumbnails(
+                disc_id=job.job_id,  # Reuse disc_id storage structure
+                title_index=0,  # Single title per job
+                thumbnails=request.thumbnails,
+                timestamps=request.thumbnail_timestamps,
+            )
+            # Update job with thumbnail URLs
+            job.thumbnails = thumbnail_urls
+            job.thumbnail_timestamps = request.thumbnail_timestamps
+            # Persist the update
+            job = await job_queue.update_job_thumbnails(job.job_id, thumbnail_urls, request.thumbnail_timestamps)
+            logger.info(f"Stored {len(thumbnail_urls)} thumbnails for job {job.job_id}")
+        except Exception as e:
+            logger.error(f"Failed to store thumbnails for job {job.job_id}: {e}")
+
+    return job
 
 
 @router.get("", response_model=list[Job])
