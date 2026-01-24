@@ -170,6 +170,9 @@ async def approve_preview(
     disc.preview_status = PreviewStatus.APPROVED
     logger.info(f"Approved preview for disc {disc_id}")
 
+    # Save to database
+    disc = await job_queue.update_disc(disc)
+
     return disc
 
 
@@ -187,6 +190,9 @@ async def reject_preview(
     # Mark as rejected
     disc.preview_status = PreviewStatus.REJECTED
     logger.info(f"Rejected preview for disc {disc_id}")
+
+    # Save to database
+    disc = await job_queue.update_disc(disc)
 
     return disc
 
