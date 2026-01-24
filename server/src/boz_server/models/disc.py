@@ -49,6 +49,10 @@ class Title(BaseModel):
     episode_title: Optional[str] = None  # Episode name from TheTVDB
     confidence_score: float = 0.0  # Matching confidence (0-1)
 
+    # Thumbnail preview fields
+    thumbnails: list[str] = []  # Base64-encoded JPEG thumbnails
+    thumbnail_timestamps: list[int] = []  # Timestamps where thumbnails were extracted
+
     @property
     def duration_formatted(self) -> str:
         """Return duration as HH:MM:SS."""

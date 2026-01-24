@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, PreviewGeneratorDep
+from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, PreviewGeneratorDep, ThumbnailStorageDep
 from boz_server.models.disc import Disc, DiscDetected, DiscEjected, DiscType, PreviewStatus, Title
 from boz_server.models.tv_show import TVSeason
 
@@ -32,9 +32,14 @@ async def disc_detected(
     agent_manager: AgentManagerDep,
     job_queue: JobQueueDep,
     preview_generator: PreviewGeneratorDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep,
 ) -> Disc:
     """Report a detected disc from an agent."""
+    # Count titles with thumbnails
+    titles_with_thumbs = sum(1 for t in request.titles if t.thumbnails)
+    total_thumbs = sum(len(t.thumbnails) for t in request.titles)
+
     logger.info(f"========================================")
     logger.info(f"DISC DETECTED ENDPOINT")
     logger.info(f"Disc Name: {request.disc_name}")
@@ -42,6 +47,7 @@ async def disc_detected(
     logger.info(f"Agent: {request.agent_id}")
     logger.info(f"Drive: {request.drive}")
     logger.info(f"Titles: {len(request.titles)}")
+    logger.info(f"Thumbnails: {total_thumbs} across {titles_with_thumbs} titles")
     logger.info(f"========================================")
 
     # Verify agent exists
@@ -76,14 +82,29 @@ async def disc_detected(
     logger.info(f"Creating new disc record with type: {disc_type}")
 
     # Create new disc record
+    disc_id = str(uuid4())
     disc = Disc(
-        disc_id=str(uuid4()),
+        disc_id=disc_id,
         agent_id=request.agent_id,
         drive=request.drive,
         disc_name=request.disc_name,
         disc_type=disc_type,
         titles=request.titles,
     )
+
+    # Process and store thumbnails
+    for title in disc.titles:
+        if title.thumbnails:
+            # Store base64 thumbnails as files and replace with URLs
+            thumbnail_urls = thumbnail_storage.save_thumbnails(
+                disc_id,
+                title.index,
+                title.thumbnails,
+                title.thumbnail_timestamps,
+            )
+            # Replace base64 data with URLs
+            title.thumbnails = thumbnail_urls
+            logger.debug(f"Stored {len(thumbnail_urls)} thumbnails for title {title.index}")
 
     # Generate preview automatically
     logger.info(f"Triggering preview generation for new disc: {disc.disc_id}")
@@ -142,6 +163,7 @@ class PreviewApprovalRequest(BaseModel):
 async def approve_preview(
     disc_id: str,
     job_queue: JobQueueDep,
+    thumbnail_storage: ThumbnailStorageDep,
     request: PreviewApprovalRequest | None = None,
     _: ApiKeyDep = None,
 ) -> Disc:
@@ -170,6 +192,13 @@ async def approve_preview(
     disc.preview_status = PreviewStatus.APPROVED
     logger.info(f"Approved preview for disc {disc_id}")
 
+    # Clean up thumbnails (no longer needed after approval)
+    thumbnail_storage.delete_disc_thumbnails(disc_id)
+    # Clear thumbnail URLs from titles
+    for title in disc.titles:
+        title.thumbnails = []
+        title.thumbnail_timestamps = []
+
     # Save to database
     disc = await job_queue.update_disc(disc)
 
@@ -180,6 +209,7 @@ async def approve_preview(
 async def reject_preview(
     disc_id: str,
     job_queue: JobQueueDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep = None,
 ) -> Disc:
     """Reject disc preview and block ripping."""
@@ -190,6 +220,13 @@ async def reject_preview(
     # Mark as rejected
     disc.preview_status = PreviewStatus.REJECTED
     logger.info(f"Rejected preview for disc {disc_id}")
+
+    # Clean up thumbnails (no longer needed after rejection)
+    thumbnail_storage.delete_disc_thumbnails(disc_id)
+    # Clear thumbnail URLs from titles
+    for title in disc.titles:
+        title.thumbnails = []
+        title.thumbnail_timestamps = []
 
     # Save to database
     disc = await job_queue.update_disc(disc)

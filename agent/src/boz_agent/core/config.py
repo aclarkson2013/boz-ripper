@@ -40,6 +40,19 @@ class MakeMKVConfig(BaseModel):
     profile: Optional[str] = None
 
 
+class ThumbnailConfig(BaseModel):
+    """Thumbnail extraction configuration."""
+
+    enabled: bool = True
+    ffmpeg_path: str = "ffmpeg"  # Assumes ffmpeg is in PATH
+    # Timestamps to extract (in seconds from start)
+    timestamps: list[int] = Field(default_factory=lambda: [30, 120, 300])  # 0:30, 2:00, 5:00
+    extract_midpoint: bool = True  # Also extract at 50% of duration
+    quality: int = 2  # JPEG quality (2-31, lower is better)
+    width: int = 320  # Thumbnail width (height auto-scaled)
+    timeout: int = 30  # Timeout per thumbnail extraction
+
+
 class WorkerConfig(BaseModel):
     """Local worker/transcoding settings."""
 
@@ -87,6 +100,7 @@ class Settings(BaseSettings):
     server: ServerConfig = Field(default_factory=ServerConfig)
     disc_detection: DiscDetectionConfig = Field(default_factory=DiscDetectionConfig)
     makemkv: MakeMKVConfig = Field(default_factory=MakeMKVConfig)
+    thumbnails: ThumbnailConfig = Field(default_factory=ThumbnailConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     handbrake: HandBrakeConfig = Field(default_factory=HandBrakeConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

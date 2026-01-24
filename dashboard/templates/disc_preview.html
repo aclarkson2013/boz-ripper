@@ -220,6 +220,98 @@
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
+
+    /* Thumbnail styles */
+    .thumbnail-row {
+        background: #0f172a;
+    }
+
+    .thumbnail-row td {
+        padding: 1rem 1rem 1.5rem 3rem;
+    }
+
+    .thumbnail-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        max-width: 800px;
+    }
+
+    .thumbnail-item {
+        position: relative;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        border: 1px solid #334155;
+        background: #1e293b;
+    }
+
+    .thumbnail-item img {
+        width: 100%;
+        height: auto;
+        display: block;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .thumbnail-item img:hover {
+        transform: scale(1.02);
+    }
+
+    .thumbnail-timestamp {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.7);
+        color: #e2e8f0;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        text-align: center;
+    }
+
+    .thumbnail-toggle {
+        color: var(--boz-info);
+        cursor: pointer;
+        font-size: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .thumbnail-toggle:hover {
+        text-decoration: underline;
+    }
+
+    .no-thumbnails {
+        color: #64748b;
+        font-style: italic;
+        font-size: 0.875rem;
+    }
+
+    /* Modal for fullsize thumbnail view */
+    .thumbnail-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+
+    .thumbnail-modal.active {
+        display: flex;
+    }
+
+    .thumbnail-modal img {
+        max-width: 90%;
+        max-height: 90%;
+        border-radius: 0.5rem;
+    }
 </style>
 {% endblock %}
 
@@ -323,10 +415,11 @@
                                 <th style="width: 5%">Select</th>
                                 <th style="width: 5%">#</th>
                                 <th style="width: 8%">Type</th>
-                                <th style="width: 35%">Proposed Filename</th>
+                                <th style="width: 30%">Proposed Filename</th>
                                 <th style="width: 8%">Duration</th>
                                 <th style="width: 8%">Size</th>
                                 <th style="width: 10%">Confidence</th>
+                                <th style="width: 10%">Preview</th>
                             </tr>
                         </thead>
                         <tbody id="tracks-tbody">
@@ -480,6 +573,17 @@
                 confidenceHtml = `<span class="confidence-indicator ${confClass}">${confLabel} (${score}%)</span>`;
             }
 
+            // Thumbnail toggle
+            const hasThumbnails = title.thumbnails && title.thumbnails.length > 0;
+            let thumbnailHtml = '<span class="no-thumbnails">No preview</span>';
+            if (hasThumbnails) {
+                thumbnailHtml = `
+                    <span class="thumbnail-toggle" onclick="toggleThumbnails(${title.index})">
+                        <i class="bi bi-images"></i> ${title.thumbnails.length} images
+                    </span>
+                `;
+            }
+
             const row = `
                 <tr data-index="${title.index}">
                     <td class="text-center">
@@ -497,10 +601,58 @@
                     <td>${formatDuration(title.duration_seconds)}</td>
                     <td>${formatSize(title.size_bytes)}</td>
                     <td>${confidenceHtml}</td>
+                    <td>${thumbnailHtml}</td>
                 </tr>
             `;
             tbody.insertAdjacentHTML('beforeend', row);
+
+            // Add thumbnail row (hidden by default)
+            if (hasThumbnails) {
+                const thumbRow = `
+                    <tr id="thumbs-${title.index}" class="thumbnail-row" style="display: none;">
+                        <td colspan="8">
+                            <div class="thumbnail-grid">
+                                ${title.thumbnails.map((url, i) => `
+                                    <div class="thumbnail-item">
+                                        <img src="${url}" alt="Preview ${i+1}" onclick="showFullThumbnail('${url}')">
+                                        <span class="thumbnail-timestamp">${formatTimestamp(title.thumbnail_timestamps ? title.thumbnail_timestamps[i] : 0)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', thumbRow);
+            }
         });
+    }
+
+    function toggleThumbnails(index) {
+        const thumbRow = document.getElementById(`thumbs-${index}`);
+        if (thumbRow) {
+            thumbRow.style.display = thumbRow.style.display === 'none' ? 'table-row' : 'none';
+        }
+    }
+
+    function formatTimestamp(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function showFullThumbnail(url) {
+        // Create modal if it doesn't exist
+        let modal = document.getElementById('thumbnail-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'thumbnail-modal';
+            modal.className = 'thumbnail-modal';
+            modal.onclick = () => modal.classList.remove('active');
+            modal.innerHTML = '<img src="" alt="Full size preview">';
+            document.body.appendChild(modal);
+        }
+        modal.querySelector('img').src = url;
+        modal.classList.add('active');
     }
 
     function toggleTrack(index, selected) {

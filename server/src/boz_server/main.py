@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from boz_server import __version__
 from boz_server.api import agents_router, discs_router, files_router, jobs_router
 from boz_server.api.workers import router as workers_router
+from boz_server.api.thumbnails import router as thumbnails_router
 from boz_server.api.deps import init_services
 from boz_server.core.config import settings
 from boz_server.database import init_db
@@ -18,6 +19,7 @@ from boz_server.services.nas_organizer import NASOrganizer
 from boz_server.services.preview_generator_db import PreviewGenerator
 from boz_server.services.thetvdb_client import TheTVDBClient
 from boz_server.services.omdb_client import OMDbClient
+from boz_server.services.thumbnail_storage import ThumbnailStorage
 from boz_server.services.worker_manager_db import WorkerManager
 
 # Configure logging
@@ -49,6 +51,10 @@ if settings.omdb_api_key:
 else:
     logger.warning("OMDb API key not configured, movie metadata lookup will be disabled")
 
+# Initialize thumbnail storage
+thumbnail_storage = ThumbnailStorage(storage_path=f"{settings.temp_dir}/thumbnails")
+logger.info("Thumbnail storage initialized")
+
 # Initialize preview generator
 preview_generator = PreviewGenerator(
     thetvdb_client=thetvdb_client,
@@ -75,6 +81,7 @@ async def lifespan(app: FastAPI):
         worker_manager,
         preview_generator,
         thetvdb_client,
+        thumbnail_storage,
     )
     await agent_manager.start()
     await nas_organizer.start()
@@ -117,6 +124,7 @@ app.include_router(discs_router)
 app.include_router(files_router)
 app.include_router(jobs_router)
 app.include_router(workers_router)
+app.include_router(thumbnails_router)
 
 
 @app.get("/")

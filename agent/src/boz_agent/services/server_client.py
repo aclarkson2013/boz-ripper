@@ -118,39 +118,54 @@ class ServerClient:
                 await self._client.aclose()
                 self._client = None
 
-    async def report_disc(self, drive: str, analysis: Any) -> None:
+    async def report_disc(
+        self,
+        drive: str,
+        analysis: Any,
+        thumbnails: Optional[dict[int, tuple[list[str], list[int]]]] = None,
+    ) -> None:
         """Report a detected disc to the server.
 
         Args:
             drive: Drive letter where disc was detected
             analysis: DiscAnalysis object from MakeMKV
+            thumbnails: Optional dict mapping title_index to (base64_images, timestamps)
         """
         if not self._agent_id:
             logger.warning("cannot_report_disc_not_registered")
             return
+
+        # Build title list with optional thumbnail data
+        titles = []
+        for t in analysis.titles:
+            title_data = {
+                "index": t.index,
+                "name": t.name,
+                "duration_seconds": t.duration_seconds,
+                "size_bytes": t.size_bytes,
+                "chapters": t.chapters,
+            }
+            # Add thumbnails if available for this title
+            if thumbnails and t.index in thumbnails:
+                imgs, times = thumbnails[t.index]
+                title_data["thumbnails"] = imgs
+                title_data["thumbnail_timestamps"] = times
+            titles.append(title_data)
 
         payload = {
             "agent_id": self._agent_id,
             "drive": drive,
             "disc_name": analysis.disc_name,
             "disc_type": analysis.disc_type,
-            "titles": [
-                {
-                    "index": t.index,
-                    "name": t.name,
-                    "duration_seconds": t.duration_seconds,
-                    "size_bytes": t.size_bytes,
-                    "chapters": t.chapters,
-                }
-                for t in analysis.titles
-            ],
+            "titles": titles,
         }
 
         try:
             client = await self._get_client()
             response = await client.post("/api/discs/detected", json=payload)
             response.raise_for_status()
-            logger.info("disc_reported", drive=drive, disc_name=analysis.disc_name)
+            thumb_count = sum(len(thumbnails.get(t.index, ([], []))[0]) for t in analysis.titles) if thumbnails else 0
+            logger.info("disc_reported", drive=drive, disc_name=analysis.disc_name, thumbnails=thumb_count)
         except Exception as e:
             logger.error("disc_report_failed", error=str(e))
 
