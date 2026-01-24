@@ -358,6 +358,12 @@
     const discId = "{{ disc_id }}";
     let discData = null;
 
+    // Toast notification helper
+    function showToast(title, message, type = 'info') {
+        // For now, just use alert - can be replaced with a nicer toast library later
+        alert(`${title}: ${message}`);
+    }
+
     // Load disc preview on page load
     document.addEventListener('DOMContentLoaded', loadDiscPreview);
 
