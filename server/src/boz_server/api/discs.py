@@ -61,6 +61,8 @@ async def disc_detected(
         # Regenerate preview with updated data
         logger.info(f"Triggering preview regeneration for existing disc: {existing.disc_id}")
         existing = await preview_generator.generate_preview(existing)
+        # Save updated disc to database
+        existing = await job_queue.update_disc(existing)
         logger.info(f"Preview regeneration complete, returning disc")
         return existing
 
