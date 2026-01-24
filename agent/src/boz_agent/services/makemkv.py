@@ -2,6 +2,8 @@
 
 import asyncio
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -11,6 +13,21 @@ import structlog
 from boz_agent.core.config import MakeMKVConfig
 
 logger = structlog.get_logger()
+
+# Timeout constants
+DISC_INDEX_TIMEOUT = 30  # seconds to get disc index
+ANALYZE_TIMEOUT = 60  # seconds to analyze disc
+RIP_TIMEOUT = 7200  # 2 hours max for ripping
+
+
+def _get_subprocess_flags() -> dict:
+    """Get platform-specific subprocess flags to prevent GUI popups."""
+    if sys.platform == "win32":
+        return {
+            "creationflags": subprocess.CREATE_NO_WINDOW,
+            "stdin": subprocess.DEVNULL,
+        }
+    return {"stdin": subprocess.DEVNULL}
 
 
 @dataclass
@@ -93,17 +110,30 @@ class MakeMKVService:
         cmd = [
             str(self._executable),
             "-r",  # Robot mode (parseable output)
+            "--noscan",  # Don't scan for other devices
             "info",
             f"disc:{disc_index}",
         ]
 
+        logger.debug("analyze_disc_cmd", cmd=" ".join(cmd))
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **_get_subprocess_flags(),
         )
 
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=ANALYZE_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.error("analyze_disc_timeout", drive=drive, timeout=ANALYZE_TIMEOUT)
+            process.kill()
+            await process.wait()
+            raise RuntimeError(f"MakeMKV analysis timed out after {ANALYZE_TIMEOUT}s")
+
         output = stdout.decode("utf-8", errors="replace")
 
         if process.returncode != 0:
@@ -167,6 +197,7 @@ class MakeMKVService:
         cmd = [
             str(self._executable),
             "-r",  # Robot mode
+            "--noscan",  # Don't scan for other devices
             "mkv",
             f"disc:{disc_index}",
             str(title_index),
@@ -179,6 +210,7 @@ class MakeMKVService:
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            **_get_subprocess_flags(),
         )
 
         logger.debug("makemkv_started", pid=process.pid)
@@ -243,18 +275,33 @@ class MakeMKVService:
         cmd = [
             str(self._executable),
             "-r",
+            "--noscan",  # Don't scan for other devices
             "info",
             "disc:9999",  # Invalid index triggers drive listing
         ]
 
         try:
+            logger.debug("getting_disc_index", drive=drive, cmd=" ".join(cmd))
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **_get_subprocess_flags(),
             )
-            stdout, _ = await process.communicate()
+
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=DISC_INDEX_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                logger.error("disc_index_timeout", drive=drive, timeout=DISC_INDEX_TIMEOUT)
+                process.kill()
+                await process.wait()
+                return 0
+
             output = stdout.decode("utf-8", errors="replace")
+            logger.debug("disc_index_output", output_lines=len(output.splitlines()))
 
             # Parse DRV lines: DRV:index,visible,enabled,flags,drive_name,disc_name
             # Example: DRV:0,2,999,12,"HL-DT-ST BD-RE  BH16NS40 USB Device","LIFE_AQUATIC_D1"
