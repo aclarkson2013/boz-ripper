@@ -95,6 +95,7 @@ class Disc(BaseModel):
     tv_season_number: Optional[int] = None
     tv_season_id: Optional[str] = None  # Internal tracking ID for multi-disc seasons
     thetvdb_series_id: Optional[int] = None
+    starting_episode_number: Optional[int] = None  # Episode number to start from (overrides auto-continuation)
 
     @property
     def main_feature(self) -> Optional[Title]:
