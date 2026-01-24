@@ -188,11 +188,10 @@ class PreviewGenerator:
             if self.thetvdb_client and not tv_season.episodes:
                 logger.info(f"Querying TheTVDB for {show_name} S{season_number}")
                 try:
-                    series_results = await self.thetvdb_client.search_series(
+                    series_id = await self.thetvdb_client.search_series(
                         show_name
                     )
-                    if series_results:
-                        series_id = series_results[0]["tvdb_id"]
+                    if series_id:
                         disc.thetvdb_series_id = series_id
 
                         episodes = await self.thetvdb_client.get_season_episodes(

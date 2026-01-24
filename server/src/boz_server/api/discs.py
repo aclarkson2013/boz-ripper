@@ -229,8 +229,12 @@ async def update_season_and_episode(
                     disc.thetvdb_series_id,
                     request.season_number
                 )
-                tv_season.episodes = episodes
-                logger.info(f"Loaded {len(episodes)} episodes from TheTVDB")
+                if episodes:
+                    tv_season.episodes = episodes
+                    await preview_generator.update_season_episodes(
+                        tv_season.season_id, episodes, disc.thetvdb_series_id
+                    )
+                    logger.info(f"Loaded {len(episodes)} episodes from TheTVDB")
 
         # Re-match episodes with the new starting episode
         logger.info("Re-matching episodes with new season/episode settings")
