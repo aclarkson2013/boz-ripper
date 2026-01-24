@@ -17,6 +17,7 @@ from boz_server.services.job_queue_db import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
 from boz_server.services.preview_generator_db import PreviewGenerator
 from boz_server.services.thetvdb_client import TheTVDBClient
+from boz_server.services.omdb_client import OMDbClient
 from boz_server.services.worker_manager_db import WorkerManager
 
 # Configure logging
@@ -40,9 +41,18 @@ if settings.thetvdb_api_key:
 else:
     logger.warning("TheTVDB API key not configured, TV show metadata lookup will be disabled")
 
+# Initialize OMDb client if API key is configured
+omdb_client = None
+if settings.omdb_api_key:
+    logger.info("OMDb API key configured, initializing client")
+    omdb_client = OMDbClient(settings.omdb_api_key)
+else:
+    logger.warning("OMDb API key not configured, movie metadata lookup will be disabled")
+
 # Initialize preview generator
 preview_generator = PreviewGenerator(
     thetvdb_client=thetvdb_client,
+    omdb_client=omdb_client,
     output_dir=settings.output_dir,
 )
 
@@ -81,6 +91,8 @@ async def lifespan(app: FastAPI):
     await worker_manager.stop()
     if thetvdb_client:
         await thetvdb_client.close()
+    if omdb_client:
+        await omdb_client.close()
 
 
 app = FastAPI(

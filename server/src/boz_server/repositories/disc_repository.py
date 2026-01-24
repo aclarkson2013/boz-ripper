@@ -43,6 +43,10 @@ class DiscRepository(BaseRepository[DiscORM]):
             tv_season_id=disc.tv_season_id,
             thetvdb_series_id=disc.thetvdb_series_id,
             starting_episode_number=disc.starting_episode_number,
+            movie_title=disc.movie_title,
+            movie_year=disc.movie_year,
+            omdb_imdb_id=disc.omdb_imdb_id,
+            movie_confidence=disc.movie_confidence,
         )
 
         # Create title ORMs
@@ -127,6 +131,10 @@ class DiscRepository(BaseRepository[DiscORM]):
             tv_season_id=disc_orm.tv_season_id,
             thetvdb_series_id=disc_orm.thetvdb_series_id,
             starting_episode_number=disc_orm.starting_episode_number,
+            movie_title=disc_orm.movie_title,
+            movie_year=disc_orm.movie_year,
+            omdb_imdb_id=disc_orm.omdb_imdb_id,
+            movie_confidence=disc_orm.movie_confidence,
         )
 
     async def get_by_agent_drive(
@@ -211,6 +219,58 @@ class DiscRepository(BaseRepository[DiscORM]):
 
         # Update existing titles by index
         for title in titles:
+            for title_orm in disc_orm.titles:
+                if title_orm.title_index == title.index:
+                    title_orm.name = title.name
+                    title_orm.selected = title.selected
+                    title_orm.is_extra = title.is_extra
+                    title_orm.proposed_filename = title.proposed_filename
+                    title_orm.proposed_path = title.proposed_path
+                    title_orm.episode_number = title.episode_number
+                    title_orm.episode_title = title.episode_title
+                    title_orm.confidence_score = title.confidence_score
+                    break
+
+        await self.session.flush()
+        await self.session.refresh(disc_orm)
+        return self.to_pydantic(disc_orm)
+
+    async def update_from_pydantic(self, disc: Disc) -> Optional[Disc]:
+        """
+        Update disc from Pydantic model (full update).
+
+        Args:
+            disc: Pydantic Disc model with updated values
+
+        Returns:
+            Updated disc or None if not found
+        """
+        disc_orm = await self.get_with_titles(disc.disc_id)
+        if not disc_orm:
+            return None
+
+        # Update all fields
+        disc_orm.disc_name = disc.disc_name
+        disc_orm.disc_type = disc.disc_type.value
+        disc_orm.status = disc.status
+        disc_orm.media_type = disc.media_type.value
+        disc_orm.preview_status = disc.preview_status.value
+
+        # TV show fields
+        disc_orm.tv_show_name = disc.tv_show_name
+        disc_orm.tv_season_number = disc.tv_season_number
+        disc_orm.tv_season_id = disc.tv_season_id
+        disc_orm.thetvdb_series_id = disc.thetvdb_series_id
+        disc_orm.starting_episode_number = disc.starting_episode_number
+
+        # Movie fields
+        disc_orm.movie_title = disc.movie_title
+        disc_orm.movie_year = disc.movie_year
+        disc_orm.omdb_imdb_id = disc.omdb_imdb_id
+        disc_orm.movie_confidence = disc.movie_confidence
+
+        # Update titles
+        for title in disc.titles:
             for title_orm in disc_orm.titles:
                 if title_orm.title_index == title.index:
                     title_orm.name = title.name

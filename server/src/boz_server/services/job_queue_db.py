@@ -71,16 +71,17 @@ class JobQueue:
             return await repo.get_all_with_titles()
 
     async def update_disc(self, disc: Disc) -> Disc:
-        """Update a disc."""
+        """Update a disc (full update including all fields)."""
         async with await self._get_session() as session:
             repo = DiscRepository(session)
-            # Update preview status
-            await repo.update_preview_status(disc.disc_id, disc.preview_status)
-            # Update titles
-            await repo.update_titles(disc.disc_id, disc.titles)
+            # Full update from Pydantic model
+            updated_disc = await repo.update_from_pydantic(disc)
             await session.commit()
 
-            # Fetch updated disc
+            if updated_disc:
+                return updated_disc
+
+            # Fallback: fetch updated disc if update returned None
             disc_orm = await repo.get_with_titles(disc.disc_id)
             return repo.to_pydantic(disc_orm) if disc_orm else disc
 

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # TheTVDB settings
     thetvdb_api_key: Optional[str] = None  # TheTVDB v4 API key
 
+    # OMDb settings (for movie metadata)
+    omdb_api_key: Optional[str] = None  # OMDb API key for movie lookup
+
     # Preview/extras filtering settings
     extras_min_duration_seconds: int = 600  # 10 minutes - titles shorter are likely extras
     extras_duration_variance: float = 0.4  # 40% - titles with >40% duration variance from median are likely extras

@@ -48,6 +48,12 @@ class DiscORM(Base):
     thetvdb_series_id: Mapped[Optional[int]] = mapped_column(Integer)
     starting_episode_number: Mapped[Optional[int]] = mapped_column(Integer)
 
+    # Movie fields
+    movie_title: Mapped[Optional[str]] = mapped_column(String(255))
+    movie_year: Mapped[Optional[int]] = mapped_column(Integer)
+    omdb_imdb_id: Mapped[Optional[str]] = mapped_column(String(20))
+    movie_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+
     # Relationship to titles
     titles: Mapped[list["TitleORM"]] = relationship(
         "TitleORM", back_populates="disc", cascade="all, delete-orphan"

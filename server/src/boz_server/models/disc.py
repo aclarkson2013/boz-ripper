@@ -97,6 +97,12 @@ class Disc(BaseModel):
     thetvdb_series_id: Optional[int] = None
     starting_episode_number: Optional[int] = None  # Episode number to start from (overrides auto-continuation)
 
+    # Movie fields
+    movie_title: Optional[str] = None  # Cleaned/matched movie title from OMDb
+    movie_year: Optional[int] = None  # Release year from OMDb
+    omdb_imdb_id: Optional[str] = None  # IMDb ID for the movie
+    movie_confidence: float = 0.0  # Confidence score for movie match (0-1)
+
     @property
     def main_feature(self) -> Optional[Title]:
         """Get the likely main feature (longest title)."""
