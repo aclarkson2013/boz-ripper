@@ -29,7 +29,7 @@ services:
       # Output storage for transcoded files
       - boz-output:/data/output
       # Optional: Mount NAS share
-      # - //NAS_IP/share:/nas:rw
+      - /mnt/qnap-plex:/nas:rw
     networks:
       - boz-network
     healthcheck:

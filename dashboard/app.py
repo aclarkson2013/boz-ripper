@@ -321,6 +321,15 @@ def api_reject_preview(disc_id: str):
     return jsonify({"error": "Failed to reject preview"}), 400
 
 
+
+@app.route("/api/discs/<disc_id>/preview/update-season", methods=["POST"])
+def api_update_season(disc_id: str):
+    """Update season and starting episode for a disc."""
+    data = request.json
+    result = api_request("POST", f"/api/discs/{disc_id}/preview/update-season", json=data)
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Failed to update season/episode"}), 400
 @app.route("/api/tv-seasons/<season_id>")
 def api_tv_season(season_id: str):
     """Get TV season tracking info."""

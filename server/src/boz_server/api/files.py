@@ -1,5 +1,7 @@
 """File upload and management API endpoints."""
 
+import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -9,13 +11,44 @@ from boz_server.api.deps import ApiKeyDep, NASOrganizerDep
 from boz_server.core.config import settings
 
 router = APIRouter(prefix="/api/files", tags=["files"])
+logger = logging.getLogger(__name__)
+
+
+def parse_tv_filename(filename: str) -> dict | None:
+    """Parse TV show filename: 'Show Name - S01E02 - Episode Title.mkv'"""
+    pattern = r"^(.+?) - S(\d+)E(\d+)(?: - (.+?))?\.(\w+)$"
+    match = re.match(pattern, filename)
+    if match:
+        return {
+            "media_type": "tv",
+            "show_name": match.group(1),
+            "season": int(match.group(2)),
+            "episode": int(match.group(3)),
+            "episode_title": match.group(4),
+            "extension": match.group(5),
+        }
+    return None
+
+
+def parse_movie_filename(filename: str) -> dict | None:
+    """Parse movie filename: 'Movie Name (Year).mkv'"""
+    pattern = r"^(.+?)(?: \((\d{4})\))?\.(\w+)$"
+    match = re.match(pattern, filename)
+    if match:
+        return {
+            "media_type": "movie",
+            "movie_name": match.group(1),
+            "year": int(match.group(2)) if match.group(2) else None,
+            "extension": match.group(3),
+        }
+    return None
 
 
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
     name: str = Form(...),
-    media_type: str = Form("movie"),  # movie or tv
+    nas_organizer: NASOrganizerDep = None,
     _: ApiKeyDep = None,
 ) -> dict:
     """Upload a transcoded file from an agent.
@@ -23,7 +56,7 @@ async def upload_file(
     Args:
         file: The file to upload
         name: Name/identifier for the file
-        media_type: Type of media (movie or tv)
+        nas_organizer: NAS organizer service (injected)
 
     Returns:
         Upload result with file path
@@ -42,20 +75,59 @@ async def upload_file(
                 f.write(chunk)
 
         file_size = file_path.stat().st_size
+        logger.info(f"File uploaded: {file.filename} ({file_size} bytes)")
+
+        # Parse filename to get metadata
+        metadata = parse_tv_filename(file.filename) or parse_movie_filename(file.filename)
+
+        # Auto-organize to NAS if enabled and metadata parsed
+        final_path = None
+        organized = False
+
+        if metadata and settings.nas_enabled and nas_organizer:
+            logger.info(f"Auto-organizing file: {file.filename}")
+            logger.info(f"Parsed metadata: {metadata}")
+
+            if metadata["media_type"] == "tv":
+                final_path = nas_organizer.organize_tv_episode(
+                    file_path,
+                    metadata["show_name"],
+                    metadata["season"],
+                    metadata["episode"],
+                    metadata.get("episode_title"),
+                )
+                organized = final_path is not None
+            elif metadata["media_type"] == "movie":
+                final_path = nas_organizer.organize_movie(
+                    file_path,
+                    metadata["movie_name"],
+                    metadata.get("year"),
+                )
+                organized = final_path is not None
+
+            if organized:
+                logger.info(f"File organized to NAS: {final_path}")
+            else:
+                logger.warning(f"Failed to organize file to NAS - file remains at {file_path}")
+        else:
+            logger.info(f"Auto-organization skipped (nas_enabled={settings.nas_enabled}, metadata={'found' if metadata else 'not found'})")
 
         return {
             "status": "ok",
             "filename": file.filename,
             "name": name,
             "path": str(file_path),
+            "final_path": str(final_path) if final_path else str(file_path),
             "size": file_size,
-            "media_type": media_type,
+            "organized": organized,
+            "metadata": metadata,
         }
 
     except Exception as e:
         # Clean up partial file on error
         if file_path.exists():
             file_path.unlink()
+        logger.error(f"Upload failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
@@ -70,7 +142,7 @@ async def organize_file(
     nas_organizer: NASOrganizerDep = None,
     _: ApiKeyDep = None,
 ) -> dict:
-    """Organize an uploaded file to the NAS.
+    """Manually organize an uploaded file to the NAS.
 
     Args:
         filename: Name of the uploaded file

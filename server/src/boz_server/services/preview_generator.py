@@ -167,7 +167,7 @@ class PreviewGenerator:
                 main_titles = self.extras_filter.get_main_titles(disc.titles)
                 if main_titles:
                     logger.info(f"Matching {len(main_titles)} main titles to episodes")
-                    self.episode_matcher.match_episodes(main_titles, tv_season)
+                    self.episode_matcher.match_episodes(main_titles, tv_season, starting_episode=disc.starting_episode_number)
                     logger.info(f"✓ Episode matching complete")
                     for title in main_titles[:5]:  # Log first 5
                         logger.info(f"  Title {title.index} → Episode {title.episode_number}: {title.episode_title} (confidence: {title.confidence_score:.2f})")

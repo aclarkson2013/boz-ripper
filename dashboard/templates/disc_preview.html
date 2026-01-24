@@ -262,6 +262,54 @@
             <!-- Will be populated by JavaScript if TV show -->
         </div>
 
+
+        <!-- Season/Episode Controls (for TV shows only) -->
+        <div id="season-controls" class="card mb-3" style="display: none;">
+            <div class="card-header">
+                <h5 class="mb-0">Season & Episode Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="seasonSelect" class="form-label">Season Number</label>
+                        <select id="seasonSelect" class="form-select">
+                            <option value="1">Season 1</option>
+                            <option value="2">Season 2</option>
+                            <option value="3">Season 3</option>
+                            <option value="4">Season 4</option>
+                            <option value="5">Season 5</option>
+                            <option value="6">Season 6</option>
+                            <option value="7">Season 7</option>
+                            <option value="8">Season 8</option>
+                            <option value="9">Season 9</option>
+                            <option value="10">Season 10</option>
+                            <option value="11">Season 11</option>
+                            <option value="12">Season 12</option>
+                            <option value="13">Season 13</option>
+                            <option value="14">Season 14</option>
+                            <option value="15">Season 15</option>
+                            <option value="16">Season 16</option>
+                            <option value="17">Season 17</option>
+                            <option value="18">Season 18</option>
+                            <option value="19">Season 19</option>
+                            <option value="20">Season 20</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="episodeSelect" class="form-label">Starting Episode</label>
+                        <input type="number" id="episodeSelect" class="form-control" min="1" value="1">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button id="updateSeasonBtn" class="btn btn-primary">
+                            <i class="fas fa-sync-alt me-2"></i>Update Season/Episodes
+                        </button>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <small class="text-muted">Current: <span id="current-season-episode">-</span></small>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Tracks Table -->
         <div class="card">
             <div class="card-header">
@@ -391,8 +439,17 @@
         `;
         document.getElementById('tv-info-panel').innerHTML = info;
         document.getElementById('tv-info-panel').style.display = 'block';
+        
+        // Show and populate season controls
+        document.getElementById('season-controls').style.display = 'block';
+        document.getElementById('seasonSelect').value = discData.tv_season_number || 1;
+        document.getElementById('episodeSelect').value = discData.starting_episode_number || 1;
+        
+        // Update current display
+        const currentSeason = discData.tv_season_number || 1;
+        const currentEpisode = discData.starting_episode_number || 1;
+        document.getElementById('current-season-episode').textContent = `S${currentSeason.toString().padStart(2, '0')}E${currentEpisode.toString().padStart(2, '0')}`;
     }
-
     function renderTracks() {
         const tbody = document.getElementById('tracks-tbody');
         tbody.innerHTML = '';
@@ -454,6 +511,43 @@
         }
     }
 
+
+    // Update Season/Episode button handler
+    document.getElementById('updateSeasonBtn').addEventListener('click', async () => {
+        const seasonSelect = document.getElementById('seasonSelect');
+        const episodeInput = document.getElementById('episodeSelect');
+        const btn = document.getElementById('updateSeasonBtn');
+        
+        const season = parseInt(seasonSelect.value);
+        const episode = parseInt(episodeInput.value);
+        
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> Updating...';
+        
+        try {
+            const response = await fetch(`/api/discs/${discId}/preview/update-season`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    season_number: season,
+                    starting_episode: episode
+                })
+            });
+            
+            if (!response.ok) throw new Error('Failed to update season/episode');
+            
+            // Reload the disc data to show updated episodes
+            await loadDiscPreview();
+            
+            showToast('Success', `Updated to Season ${season}, Episode ${episode}`, 'success');
+        } catch (error) {
+            console.error('Error updating season/episode:', error);
+            showToast('Error', 'Failed to update season/episode', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Update Season/Episodes';
+        }
+    });
     // Approve button handler
     document.getElementById('btn-approve').addEventListener('click', async () => {
         const btn = document.getElementById('btn-approve');

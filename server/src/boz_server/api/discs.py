@@ -17,6 +17,12 @@ class RipRequest(BaseModel):
     """Request body for starting a rip."""
     title_indices: list[int] | None = None
 
+class SeasonEpisodeUpdate(BaseModel):
+    """Request to update season and starting episode."""
+    season_number: int
+    starting_episode: int = 1
+
+
 router = APIRouter(prefix="/api/discs", tags=["discs"])
 
 
@@ -183,6 +189,74 @@ async def reject_preview(
     return disc
 
 
+
+@router.post("/{disc_id}/preview/update-season")
+async def update_season_and_episode(
+    disc_id: str,
+    request: SeasonEpisodeUpdate,
+    job_queue: JobQueueDep,
+    preview_generator: PreviewGeneratorDep,
+    _: ApiKeyDep = None,
+) -> Disc:
+    """Update season and starting episode, then regenerate preview."""
+    disc = job_queue.get_disc(disc_id)
+    if not disc:
+        raise HTTPException(status_code=404, detail="Disc not found")
+
+    logger.info(f"Updating disc {disc_id} to Season {request.season_number}, Episode {request.starting_episode}")
+
+    # Update season and starting episode
+    old_season = disc.tv_season_number
+    old_episode = disc.starting_episode_number
+    disc.tv_season_number = request.season_number
+    disc.starting_episode_number = request.starting_episode
+
+    # Get or create the new season tracker
+    if disc.tv_show_name:
+        tv_season = preview_generator.get_or_create_season(
+            disc.tv_show_name,
+            request.season_number
+        )
+        disc.tv_season_id = tv_season.season_id
+
+        # Re-fetch TheTVDB episodes for this season if needed
+        if preview_generator.thetvdb_client and not tv_season.episodes:
+            logger.info(f"Fetching TheTVDB episodes for season {request.season_number}")
+            if disc.thetvdb_series_id:
+                episodes = await preview_generator.thetvdb_client.get_season_episodes(
+                    disc.thetvdb_series_id,
+                    request.season_number
+                )
+                tv_season.episodes = episodes
+                logger.info(f"Loaded {len(episodes)} episodes from TheTVDB")
+
+        # Re-match episodes with the new starting episode
+        logger.info("Re-matching episodes with new season/episode settings")
+        main_titles = preview_generator.extras_filter.get_main_titles(disc.titles)
+        if main_titles:
+            preview_generator.episode_matcher.match_episodes(
+                main_titles,
+                tv_season,
+                starting_episode=request.starting_episode
+            )
+
+            # Re-generate filenames with new episode numbers
+            for title in disc.titles:
+                preview_generator.media_namer.apply_naming(
+                    title,
+                    disc.media_type,
+                    show_name=disc.tv_show_name,
+                    season_number=request.season_number,
+                )
+
+            logger.info(f"✓ Season/episode update complete: S{old_season:02d}E{old_episode or 1:02d} → S{request.season_number:02d}E{request.starting_episode:02d}")
+        else:
+            logger.warning("No main titles found for episode re-matching")
+    else:
+        logger.warning("Disc is not a TV show, cannot update season/episode")
+        raise HTTPException(status_code=400, detail="Disc is not a TV show")
+
+    return disc
 @router.get("/tv-seasons/{season_id}", response_model=TVSeason)
 async def get_tv_season(
     season_id: str,
