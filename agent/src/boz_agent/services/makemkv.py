@@ -199,6 +199,7 @@ class MakeMKVService:
             str(self._executable),
             "-r",  # Robot mode
             "--noscan",  # Don't scan for other devices
+            "--progress=-same",  # Output progress to stdout
             "mkv",
             f"disc:{disc_index}",
             str(title_index),
@@ -438,11 +439,20 @@ class MakeMKVService:
         return 0
 
     def _parse_progress(self, line: str) -> Optional[float]:
-        """Parse PRGV progress line."""
+        """Parse PRGV progress line.
+
+        MakeMKV outputs: PRGV:current,total,max
+        - current: progress within current operation
+        - total: overall progress for this title
+        - max: maximum value (usually 65536)
+
+        We use 'total' for overall title progress.
+        """
         # Format: PRGV:current,total,max
         match = re.match(r"PRGV:(\d+),(\d+),(\d+)", line)
         if match:
             current, total, max_val = map(int, match.groups())
             if max_val > 0:
-                return (current / max_val) * 100
+                # Use 'total' for overall progress (not 'current' which is per-operation)
+                return (total / max_val) * 100
         return None
