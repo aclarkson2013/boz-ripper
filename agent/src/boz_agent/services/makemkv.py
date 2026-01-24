@@ -18,6 +18,7 @@ logger = structlog.get_logger()
 DISC_INDEX_TIMEOUT = 30  # seconds to get disc index
 ANALYZE_TIMEOUT = 60  # seconds to analyze disc
 RIP_TIMEOUT = 7200  # 2 hours max for ripping
+RIP_STALL_TIMEOUT = 300  # 5 minutes with no output = stalled
 
 
 def _get_subprocess_flags() -> dict:
@@ -215,12 +216,32 @@ class MakeMKVService:
 
         logger.debug("makemkv_started", pid=process.pid)
 
-        # Stream output for progress updates
+        # Stream output for progress updates with stall detection
         output_lines = []
         last_progress_log = 0
         lines_received = 0
+        stall_detected = False
+
         while True:
-            line = await process.stdout.readline()
+            try:
+                # Wait for output with timeout to detect stalls
+                line = await asyncio.wait_for(
+                    process.stdout.readline(),
+                    timeout=RIP_STALL_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "makemkv_stall_detected",
+                    pid=process.pid,
+                    timeout=RIP_STALL_TIMEOUT,
+                    lines_received=lines_received,
+                )
+                stall_detected = True
+                # Kill the hung process
+                process.kill()
+                await process.wait()
+                break
+
             if not line:
                 logger.debug("makemkv_stdout_closed", lines_received=lines_received)
                 break
@@ -247,6 +268,9 @@ class MakeMKVService:
             elif line_str:
                 # Log any other non-empty output
                 logger.debug("makemkv_output", line=line_str)
+
+        if stall_detected:
+            raise RuntimeError(f"MakeMKV stalled - no output for {RIP_STALL_TIMEOUT} seconds")
 
         await process.wait()
         logger.debug("makemkv_finished", returncode=process.returncode)

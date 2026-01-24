@@ -36,6 +36,7 @@ class JobRunner:
         self._running = False
         self._poll_task: Optional[asyncio.Task] = None
         self._current_job: Optional[dict] = None
+        self._rip_in_progress = False  # Only allow one rip at a time (single drive)
 
     async def start(self) -> None:
         """Start the job runner."""
@@ -79,7 +80,21 @@ class JobRunner:
                 jobs = await self.server_client.get_pending_jobs()
 
                 for job in jobs:
-                    if job.get("status") == "assigned":
+                    if job.get("status") != "assigned":
+                        continue
+
+                    job_type = job.get("job_type")
+
+                    # Only allow ONE rip job at a time (single optical drive)
+                    if job_type == "rip":
+                        if self._rip_in_progress:
+                            logger.debug("rip_job_queued", job_id=job["job_id"], reason="another rip in progress")
+                            continue
+                        # Execute the rip job (only one per poll cycle)
+                        await self._execute_job(job)
+                        break  # Don't process more jobs this cycle
+                    else:
+                        # Transcode jobs can run in parallel via WorkerService
                         await self._execute_job(job)
 
                 await asyncio.sleep(5)  # Poll every 5 seconds
@@ -126,86 +141,94 @@ class JobRunner:
         title_index = job.get("title_index", 0)
         output_name = job.get("output_name", f"title_{title_index}")
 
-        logger.info("starting_rip", job_id=job_id, title_index=title_index)
+        # Mark rip as in progress (only one at a time)
+        self._rip_in_progress = True
 
-        # Get the disc info to find the drive
-        disc = await self.server_client.get_disc(disc_id)
-        if not disc:
-            raise RuntimeError(f"Disc not found: {disc_id}")
+        try:
+            logger.info("starting_rip", job_id=job_id, title_index=title_index)
 
-        # Check preview approval status
-        preview_status = disc.get("preview_status", "pending")
-        if preview_status == "pending":
-            logger.info(
-                "rip_waiting_for_preview_approval",
-                job_id=job_id,
-                disc_id=disc_id,
-                preview_status=preview_status,
+            # Get the disc info to find the drive
+            disc = await self.server_client.get_disc(disc_id)
+            if not disc:
+                raise RuntimeError(f"Disc not found: {disc_id}")
+
+            # Check preview approval status
+            preview_status = disc.get("preview_status", "pending")
+            if preview_status == "pending":
+                logger.info(
+                    "rip_waiting_for_preview_approval",
+                    job_id=job_id,
+                    disc_id=disc_id,
+                    preview_status=preview_status,
+                )
+                # Don't fail the job, just return and let it be retried on next poll
+                # Reset status back to assigned so it will be picked up again
+                await self.server_client.update_job_status(job_id, "assigned", progress=0)
+                return
+            elif preview_status == "rejected":
+                logger.warning("rip_preview_rejected", job_id=job_id, disc_id=disc_id)
+                raise RuntimeError(f"Disc preview was rejected, cannot rip")
+
+            # Preview is approved, proceed with rip
+            drive = disc.get("drive", "D:")
+
+            # Create output directory
+            output_dir = Path(self.settings.makemkv.temp_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Progress callback
+            async def on_progress(progress: float):
+                await self.server_client.update_job_status(job_id, "running", progress=progress)
+
+            # Run MakeMKV
+            output_file = await self.makemkv.rip_title(
+                drive=drive,
+                title_index=title_index,
+                output_dir=output_dir,
+                progress_callback=on_progress,
             )
-            # Don't fail the job, just return and let it be retried on next poll
-            # Reset status back to assigned so it will be picked up again
-            await self.server_client.update_job_status(job_id, "assigned", progress=0)
-            return
-        elif preview_status == "rejected":
-            logger.warning("rip_preview_rejected", job_id=job_id, disc_id=disc_id)
-            raise RuntimeError(f"Disc preview was rejected, cannot rip")
 
-        # Preview is approved, proceed with rip
-        drive = disc.get("drive", "D:")
+            logger.info("rip_completed", job_id=job_id, makemkv_output=str(output_file))
 
-        # Create output directory
-        output_dir = Path(self.settings.makemkv.temp_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # Rename the file to match our desired output_name
+            # MakeMKV creates its own filename (e.g., G2_t05.mkv), we need to rename it
+            desired_filename = f"{output_name}.mkv"
+            desired_path = output_dir / desired_filename
 
-        # Progress callback
-        async def on_progress(progress: float):
-            await self.server_client.update_job_status(job_id, "running", progress=progress)
+            if output_file != desired_path:
+                logger.info("renaming_output", from_file=str(output_file), to_file=str(desired_path))
+                output_file.rename(desired_path)
+                output_file = desired_path
+                logger.info("file_renamed", final_path=str(output_file))
 
-        # Run MakeMKV
-        output_file = await self.makemkv.rip_title(
-            drive=drive,
-            title_index=title_index,
-            output_dir=output_dir,
-            progress_callback=on_progress,
-        )
+            logger.info("rip_finalized", job_id=job_id, output_file=str(output_file))
+            # Update job with output file path
+            await self.server_client.update_job_status(
+                job_id, "completed", progress=100, output_file=str(output_file)
+            )
 
+            # Queue transcode job for user approval (no auto-assignment)
+            logger.info("queuing_transcode_for_approval", input_file=str(output_file))
 
-        logger.info("rip_completed", job_id=job_id, makemkv_output=str(output_file))
+            # Get file size for display in dashboard
+            import os
+            file_size = os.path.getsize(output_file) if output_file.exists() else None
 
-        # Rename the file to match our desired output_name
-        # MakeMKV creates its own filename (e.g., G2_t05.mkv), we need to rename it
-        desired_filename = f"{output_name}.mkv"
-        desired_path = output_dir / desired_filename
-        
-        if output_file != desired_path:
-            logger.info("renaming_output", from_file=str(output_file), to_file=str(desired_path))
-            output_file.rename(desired_path)
-            output_file = desired_path
-            logger.info("file_renamed", final_path=str(output_file))
-        
-        logger.info("rip_finalized", job_id=job_id, output_file=str(output_file))
-        # Update job with output file path
-        await self.server_client.update_job_status(
-            job_id, "completed", progress=100, output_file=str(output_file)
-        )
+            transcode_job = await self.server_client.create_transcode_job(
+                input_file=str(output_file),
+                output_name=output_name,
+                preset=None,  # User will select via dashboard
+                requires_approval=True,
+                source_disc_name=disc.get("disc_name", output_name),
+                input_file_size=file_size,
+            )
+            if transcode_job:
+                logger.info("transcode_job_queued_for_approval", job_id=transcode_job.get("job_id"))
 
-        # Queue transcode job for user approval (no auto-assignment)
-        logger.info("queuing_transcode_for_approval", input_file=str(output_file))
-
-        # Get file size for display in dashboard
-        import os
-        file_size = os.path.getsize(output_file) if output_file.exists() else None
-
-        transcode_job = await self.server_client.create_transcode_job(
-            input_file=str(output_file),
-            output_name=output_name,
-            preset=None,  # User will select via dashboard
-            requires_approval=True,
-            source_disc_name=disc.get("disc_name", output_name),
-            input_file_size=file_size,
-        )
-        if transcode_job:
-            logger.info("transcode_job_queued_for_approval", job_id=transcode_job.get("job_id"))
+        finally:
+            # Always reset the rip-in-progress flag
+            self._rip_in_progress = False
+            logger.debug("rip_lock_released", job_id=job_id)
 
     async def _execute_transcode_job(self, job: dict) -> None:
         """Execute a transcode job using HandBrake."""
