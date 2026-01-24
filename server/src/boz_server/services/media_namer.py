@@ -33,6 +33,8 @@ class MediaNamer:
         Returns:
             Sanitized filename safe for filesystem
         """
+        # Ensure name is a string
+        name = str(name)
         # Replace invalid characters
         sanitized = re.sub(r'[<>:"/\\|?*]', "", name)
         # Replace multiple spaces with single space
