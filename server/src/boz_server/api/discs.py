@@ -262,6 +262,9 @@ async def update_season_and_episode(
         logger.warning("Disc is not a TV show, cannot update season/episode")
         raise HTTPException(status_code=400, detail="Disc is not a TV show")
 
+    # Save the updated disc to the database
+    disc = await job_queue.update_disc(disc)
+
     return disc
 @router.get("/tv-seasons/{season_id}", response_model=TVSeason)
 async def get_tv_season(
