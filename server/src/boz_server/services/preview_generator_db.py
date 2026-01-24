@@ -168,7 +168,7 @@ class PreviewGenerator:
         logger.info(f"Generating preview for disc: {disc.disc_name}")
 
         # 1. Detect TV show
-        is_tv_show, show_name, season_number = self.tv_detector.detect_tv_show(
+        is_tv_show, show_name, season_number = self.tv_detector.detect(
             disc.disc_name
         )
 
