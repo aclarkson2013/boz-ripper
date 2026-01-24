@@ -13,8 +13,10 @@ services:
     environment:
       - BOZ_DEBUG=false
       - BOZ_API_KEY=${BOZ_API_KEY:-}
-      # TheTVDB settings
+      # TheTVDB settings (for TV show metadata)
       - BOZ_THETVDB_API_KEY=${BOZ_THETVDB_API_KEY:-}
+      # OMDb settings (for movie metadata)
+      - BOZ_OMDB_API_KEY=${BOZ_OMDB_API_KEY:-}
       # Extras filtering settings
       - BOZ_EXTRAS_MIN_DURATION_SECONDS=${BOZ_EXTRAS_MIN_DURATION_SECONDS:-600}
       - BOZ_EXTRAS_DURATION_VARIANCE=${BOZ_EXTRAS_DURATION_VARIANCE:-0.4}
