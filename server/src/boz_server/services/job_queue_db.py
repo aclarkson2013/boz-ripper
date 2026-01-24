@@ -33,6 +33,8 @@ class JobQueue:
             repo = DiscRepository(session)
             disc_orm = await repo.create_from_pydantic(disc)
             await session.commit()
+            # Refresh to eagerly load titles
+            disc_orm = await repo.get_with_titles(disc.disc_id)
             logger.info(f"Disc added: {disc.disc_id} - {disc.disc_name}")
             return repo.to_pydantic(disc_orm)
 
