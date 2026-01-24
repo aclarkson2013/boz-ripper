@@ -303,21 +303,33 @@ class MakeMKVService:
             output = stdout.decode("utf-8", errors="replace")
             logger.debug("disc_index_output", output_lines=len(output.splitlines()))
 
-            # Parse DRV lines: DRV:index,visible,enabled,flags,drive_name,disc_name
-            # Example: DRV:0,2,999,12,"HL-DT-ST BD-RE  BH16NS40 USB Device","LIFE_AQUATIC_D1"
+            # Parse DRV lines to find the drive matching our drive letter
+            # Format: DRV:index,visible,flags,drive_num,"drive_name","disc_name","drive_path"
+            # Example: DRV:0,2,999,1,"BD-RE HL-DT-ST BD-RE BH16NS40","OFFICE","I:"
             drive_letter = drive.rstrip(":").upper()
 
+            # First pass: look for exact drive letter match
+            for line in output.splitlines():
+                if line.startswith("DRV:"):
+                    # Check if this line contains our drive letter (e.g., "I:")
+                    if f'"{drive_letter}:"' in line.upper() or f",{drive_letter}:" in line.upper():
+                        parts = line[4:].split(",")
+                        if len(parts) >= 1:
+                            idx = int(parts[0])
+                            logger.debug("found_drive_by_letter", index=idx, drive=drive, info=line)
+                            return idx
+
+            # Second pass: look for first drive with a disc inserted (has disc name)
             for line in output.splitlines():
                 if line.startswith("DRV:"):
                     parts = line[4:].split(",")
-                    if len(parts) >= 5:
+                    if len(parts) >= 6:
                         idx = int(parts[0])
-                        # Check if this drive has a disc (visible > 0)
                         visible = int(parts[1]) if parts[1].isdigit() else 0
-                        if visible > 0:
-                            # The drive name or location might contain our drive letter
-                            # Also check by disc index order
-                            logger.debug("found_drive", index=idx, info=line)
+                        # parts[5] is disc_name - check if it's non-empty (not just "")
+                        disc_name = parts[5].strip('"')
+                        if visible > 0 and disc_name:
+                            logger.debug("found_drive_with_disc", index=idx, disc_name=disc_name, info=line)
                             return idx
 
             # Fallback: return 0 if no disc found
