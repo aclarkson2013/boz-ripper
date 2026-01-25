@@ -315,7 +315,7 @@ class WorkerRepository(BaseRepository[WorkerORM]):
         await self.session.refresh(worker_orm)
         return self.to_pydantic(worker_orm)
 
-    async def mark_stale_workers_offline(self, timeout_seconds: int) -> int:
+    async def mark_stale_workers_offline(self, timeout_seconds: int) -> tuple[int, list[tuple[str, list[str]]]]:
         """
         Mark workers as offline if heartbeat is stale.
 
@@ -323,7 +323,7 @@ class WorkerRepository(BaseRepository[WorkerORM]):
             timeout_seconds: Timeout in seconds
 
         Returns:
-            Number of workers marked offline
+            Tuple of (count of workers marked offline, list of (worker_id, orphaned_job_ids))
         """
         cutoff = datetime.utcnow().timestamp() - timeout_seconds
         result = await self.session.execute(
@@ -331,20 +331,22 @@ class WorkerRepository(BaseRepository[WorkerORM]):
         )
 
         count = 0
+        orphaned_jobs: list[tuple[str, list[str]]] = []
+
         for worker_orm in result.scalars().all():
             if worker_orm.last_heartbeat.timestamp() < cutoff:
                 old_status = worker_orm.status
                 worker_orm.status = WorkerStatus.OFFLINE.value
 
-                # Clear jobs if worker went offline while busy
-                if old_status == WorkerStatus.BUSY.value:
-                    current_jobs = json.loads(worker_orm.current_jobs)
-                    if current_jobs:
-                        worker_orm.current_jobs = "[]"
+                # Collect orphaned jobs for failover (S13)
+                current_jobs = json.loads(worker_orm.current_jobs)
+                if current_jobs:
+                    orphaned_jobs.append((worker_orm.worker_id, current_jobs))
+                    worker_orm.current_jobs = "[]"
 
                 count += 1
 
         if count > 0:
             await self.session.flush()
 
-        return count
+        return count, orphaned_jobs

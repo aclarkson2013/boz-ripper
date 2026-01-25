@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import timedelta
 from enum import Enum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,10 @@ from ..models.worker import (
     WorkerType,
 )
 from ..repositories.worker_repository import WorkerRepository
+
+if TYPE_CHECKING:
+    from .job_queue_db import JobQueue
+    from .discord_client import DiscordClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +39,30 @@ class AssignmentStrategy(str, Enum):
 class WorkerManager:
     """Manages transcoding workers with database persistence."""
 
-    def __init__(self):
-        """Initialize worker manager."""
+    def __init__(
+        self,
+        job_queue: Optional["JobQueue"] = None,
+        discord_client: Optional["DiscordClient"] = None,
+    ):
+        """Initialize worker manager.
+
+        Args:
+            job_queue: Optional job queue for failover (S13)
+            discord_client: Optional Discord client for notifications
+        """
         self._cleanup_task: Optional[asyncio.Task] = None
         self._assignment_strategy = AssignmentStrategy.PRIORITY
         self._round_robin_index = 0
+        self._job_queue = job_queue
+        self._discord_client = discord_client
+
+    def set_job_queue(self, job_queue: "JobQueue") -> None:
+        """Set the job queue for failover support."""
+        self._job_queue = job_queue
+
+    def set_discord_client(self, discord_client: "DiscordClient") -> None:
+        """Set the Discord client for notifications."""
+        self._discord_client = discord_client
 
     async def _get_session(self) -> AsyncSession:
         """Get a new database session."""
@@ -263,10 +286,42 @@ class WorkerManager:
                 logger.error(f"Worker health check error: {e}")
 
     async def _mark_stale_workers(self) -> None:
-        """Mark workers as offline if heartbeat is stale."""
+        """Mark workers as offline if heartbeat is stale and handle failover (S13)."""
         async with await self._get_session() as session:
             repo = WorkerRepository(session)
-            count = await repo.mark_stale_workers_offline(settings.worker_timeout_seconds)
+            count, orphaned_jobs = await repo.mark_stale_workers_offline(settings.worker_timeout_seconds)
             if count > 0:
                 await session.commit()
                 logger.warning(f"Marked {count} workers offline due to stale heartbeat")
+
+                # S13: Handle job failover for orphaned jobs
+                for worker_id, job_ids in orphaned_jobs:
+                    if job_ids:
+                        await self._handle_worker_failover(worker_id, job_ids)
+
+    async def _handle_worker_failover(self, worker_id: str, job_ids: list[str]) -> None:
+        """S13: Handle failover when a worker goes offline with active jobs.
+
+        Args:
+            worker_id: ID of the worker that went offline
+            job_ids: List of job IDs that were assigned to the worker
+        """
+        logger.warning(f"Worker {worker_id} went offline with {len(job_ids)} active jobs, initiating failover")
+
+        # Reset jobs for reassignment
+        if self._job_queue:
+            reset_jobs = await self._job_queue.reset_orphaned_jobs(job_ids)
+            logger.info(f"Reset {len(reset_jobs)} jobs for failover reassignment")
+
+            # Send Discord notification about failover
+            if self._discord_client and reset_jobs:
+                try:
+                    await self._discord_client.notify_worker_failover(
+                        worker_id=worker_id,
+                        job_count=len(reset_jobs),
+                        job_names=[j.output_name or j.job_id for j in reset_jobs],
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send Discord failover notification: {e}")
+        else:
+            logger.error(f"Cannot reset orphaned jobs: job_queue not configured")

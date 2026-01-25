@@ -226,6 +226,37 @@ class DiscordClient:
 
         return await self._send_webhook(embeds=[embed])
 
+    async def notify_worker_failover(
+        self,
+        worker_id: str,
+        job_count: int,
+        job_names: Optional[list[str]] = None,
+    ) -> bool:
+        """S13: Notify that a worker went offline and jobs were reassigned.
+
+        Args:
+            worker_id: ID of the worker that went offline
+            job_count: Number of jobs being reassigned
+            job_names: Names of jobs being reassigned
+        """
+        jobs_str = ", ".join(job_names[:3]) if job_names else "Unknown"
+        if job_names and len(job_names) > 3:
+            jobs_str += f" (+{len(job_names) - 3} more)"
+
+        embed = {
+            "title": "\u26a0\ufe0f Worker Failover",
+            "description": f"Worker **{worker_id}** went offline",
+            "color": 0xF39C12,  # Orange/Warning
+            "fields": [
+                {"name": "Jobs Reassigned", "value": str(job_count), "inline": True},
+                {"name": "Affected Jobs", "value": jobs_str, "inline": False},
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+            "footer": {"text": "Boz Ripper - Jobs will be picked up by next available worker"},
+        }
+
+        return await self._send_webhook(embeds=[embed])
+
     def get_status(self) -> dict:
         """Get Discord integration status."""
         return {

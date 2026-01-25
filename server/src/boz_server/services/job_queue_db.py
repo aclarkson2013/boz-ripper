@@ -275,3 +275,21 @@ class JobQueue:
                 await session.commit()
                 logger.info(f"Job {job_id} thumbnails updated: {len(thumbnail_urls)} images")
             return job
+
+    async def reset_orphaned_jobs(self, job_ids: list[str]) -> list[Job]:
+        """S13: Reset orphaned jobs for failover when worker goes offline.
+
+        Args:
+            job_ids: List of job IDs to reset
+
+        Returns:
+            List of reset jobs
+        """
+        async with await self._get_session() as session:
+            repo = JobRepository(session)
+            reset_jobs = await repo.reset_orphaned_jobs(job_ids)
+            if reset_jobs:
+                await session.commit()
+                for job in reset_jobs:
+                    logger.info(f"Job {job.job_id} reset for failover reassignment")
+            return reset_jobs

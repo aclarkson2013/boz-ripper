@@ -116,7 +116,7 @@ Stage 2 is critical because:
 | S10 | Monitor worker health via heartbeats | P0 | [x] |
 | S11 | Assign transcode jobs based on strategy (priority/round-robin/load-balance) | P0 | [~] |
 | S12 | Support worker priorities (1-99) | P0 | [x] |
-| S13 | Handle worker failover automatically | P1 | [ ] |
+| S13 | Handle worker failover automatically | P1 | [x] |
 | S14 | Provide worker management UI | P1 | [x] |
 | S15 | Queue jobs in SQLite database | P0 | [x] |
 | S16 | Process jobs sequentially or parallel (configurable) | P0 | [x] |

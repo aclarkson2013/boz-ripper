@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Service instances
 agent_manager = AgentManager()
 job_queue = JobQueue()
-worker_manager = WorkerManager()
+worker_manager = WorkerManager()  # Will set job_queue and discord_client after they're created
 
 # Initialize Plex client (S19: Library scan after file organization)
 plex_client = PlexClient() if settings.plex_enabled else None
@@ -52,6 +52,11 @@ else:
 
 # Initialize NAS organizer with Plex and Discord clients
 nas_organizer = NASOrganizer(plex_client=plex_client, discord_client=discord_client)
+
+# S13: Wire up worker manager for failover support
+worker_manager.set_job_queue(job_queue)
+if discord_client:
+    worker_manager.set_discord_client(discord_client)
 
 # Initialize TheTVDB client if API key is configured
 thetvdb_client = None

@@ -313,3 +313,40 @@ class JobRepository(BaseRepository[JobORM]):
         await self.session.flush()
         await self.session.refresh(job_orm)
         return self.to_pydantic(job_orm)
+
+    async def reset_orphaned_jobs(self, job_ids: list[str]) -> list[Job]:
+        """
+        S13: Reset orphaned jobs for failover when worker goes offline.
+
+        Resets jobs to PENDING status so they can be reassigned.
+
+        Args:
+            job_ids: List of job IDs to reset
+
+        Returns:
+            List of reset jobs
+        """
+        reset_jobs = []
+        for job_id in job_ids:
+            job_orm = await self.get(job_id)
+            if not job_orm:
+                continue
+
+            # Only reset jobs that are assigned or running
+            if job_orm.status not in (JobStatus.ASSIGNED.value, JobStatus.RUNNING.value):
+                continue
+
+            # Reset to pending for reassignment
+            job_orm.status = JobStatus.PENDING.value
+            job_orm.assigned_agent_id = None
+            job_orm.assigned_at = None
+            job_orm.progress = 0.0
+            job_orm.started_at = None
+            # Keep requires_approval False so it gets auto-assigned on next available worker
+            job_orm.requires_approval = False
+
+            await self.session.flush()
+            await self.session.refresh(job_orm)
+            reset_jobs.append(self.to_pydantic(job_orm))
+
+        return reset_jobs
