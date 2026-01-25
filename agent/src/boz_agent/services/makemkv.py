@@ -17,6 +17,8 @@ logger = structlog.get_logger()
 # Timeout constants
 DISC_INDEX_TIMEOUT = 30  # seconds to get disc index
 ANALYZE_TIMEOUT = 180  # seconds to analyze disc (some discs with copy protection take longer)
+ANALYZE_RETRIES = 3  # number of retry attempts for disc analysis
+ANALYZE_RETRY_DELAY = 5  # seconds to wait between retries
 RIP_TIMEOUT = 7200  # 2 hours max for ripping
 RIP_STALL_TIMEOUT = 300  # 5 minutes with no output = stalled
 
@@ -104,6 +106,33 @@ class MakeMKVService:
 
         logger.info("analyzing_disc", drive=drive)
 
+        last_error = None
+        for attempt in range(1, ANALYZE_RETRIES + 1):
+            try:
+                analysis = await self._analyze_disc_attempt(drive, attempt)
+                return analysis
+            except RuntimeError as e:
+                last_error = e
+                if attempt < ANALYZE_RETRIES:
+                    logger.warning(
+                        "analyze_disc_retry",
+                        drive=drive,
+                        attempt=attempt,
+                        max_attempts=ANALYZE_RETRIES,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(ANALYZE_RETRY_DELAY)
+                else:
+                    logger.error(
+                        "analyze_disc_all_retries_failed",
+                        drive=drive,
+                        attempts=ANALYZE_RETRIES,
+                    )
+
+        raise last_error
+
+    async def _analyze_disc_attempt(self, drive: str, attempt: int = 1) -> "DiscAnalysis":
+        """Single attempt to analyze a disc."""
         # Get disc index from drive letter
         disc_index = await self._get_disc_index(drive)
 
@@ -116,7 +145,7 @@ class MakeMKVService:
             f"disc:{disc_index}",
         ]
 
-        logger.debug("analyze_disc_cmd", cmd=" ".join(cmd))
+        logger.debug("analyze_disc_cmd", cmd=" ".join(cmd), attempt=attempt)
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -130,7 +159,7 @@ class MakeMKVService:
                 timeout=ANALYZE_TIMEOUT
             )
         except asyncio.TimeoutError:
-            logger.error("analyze_disc_timeout", drive=drive, timeout=ANALYZE_TIMEOUT)
+            logger.error("analyze_disc_timeout", drive=drive, timeout=ANALYZE_TIMEOUT, attempt=attempt)
             process.kill()
             await process.wait()
             raise RuntimeError(f"MakeMKV analysis timed out after {ANALYZE_TIMEOUT}s")
@@ -143,6 +172,7 @@ class MakeMKVService:
                 drive=drive,
                 returncode=process.returncode,
                 stderr=stderr.decode("utf-8", errors="replace"),
+                attempt=attempt,
             )
             raise RuntimeError(f"MakeMKV analysis failed: {stderr.decode()}")
 
@@ -153,6 +183,7 @@ class MakeMKVService:
             drive=drive,
             disc_name=analysis.disc_name,
             title_count=len(analysis.titles),
+            attempt=attempt,
         )
 
         return analysis
