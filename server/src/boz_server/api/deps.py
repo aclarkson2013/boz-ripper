@@ -6,6 +6,7 @@ from fastapi import Depends, Header, HTTPException
 
 from boz_server.core.config import settings
 from boz_server.services.agent_manager import AgentManager
+from boz_server.services.discord_client import DiscordClient
 from boz_server.services.job_queue import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
 from boz_server.services.plex_client import PlexClient
@@ -16,6 +17,7 @@ from boz_server.services.worker_manager import WorkerManager
 
 # Global service instances
 _agent_manager: AgentManager | None = None
+_discord_client: DiscordClient | None = None
 _job_queue: JobQueue | None = None
 _nas_organizer: NASOrganizer | None = None
 _worker_manager: WorkerManager | None = None
@@ -34,9 +36,10 @@ def init_services(
     thetvdb_client: TheTVDBClient | None = None,
     thumbnail_storage: ThumbnailStorage | None = None,
     plex_client: PlexClient | None = None,
+    discord_client: DiscordClient | None = None,
 ) -> None:
     """Initialize service instances."""
-    global _agent_manager, _job_queue, _nas_organizer, _worker_manager, _preview_generator, _thetvdb_client, _thumbnail_storage, _plex_client
+    global _agent_manager, _job_queue, _nas_organizer, _worker_manager, _preview_generator, _thetvdb_client, _thumbnail_storage, _plex_client, _discord_client
     _agent_manager = agent_manager
     _job_queue = job_queue
     _nas_organizer = nas_organizer
@@ -45,6 +48,7 @@ def init_services(
     _thetvdb_client = thetvdb_client
     _thumbnail_storage = thumbnail_storage
     _plex_client = plex_client
+    _discord_client = discord_client
 
 
 def get_agent_manager() -> AgentManager:
@@ -99,6 +103,11 @@ def get_plex_client() -> PlexClient | None:
     return _plex_client
 
 
+def get_discord_client() -> DiscordClient | None:
+    """Get the Discord client instance (may be None if not configured)."""
+    return _discord_client
+
+
 async def verify_api_key(
     authorization: Annotated[str | None, Header()] = None,
 ) -> None:
@@ -120,6 +129,7 @@ async def verify_api_key(
 
 # Type aliases for dependency injection
 AgentManagerDep = Annotated[AgentManager, Depends(get_agent_manager)]
+DiscordClientDep = Annotated[DiscordClient | None, Depends(get_discord_client)]
 JobQueueDep = Annotated[JobQueue, Depends(get_job_queue)]
 NASOrganizerDep = Annotated[NASOrganizer, Depends(get_nas_organizer)]
 WorkerManagerDep = Annotated[WorkerManager, Depends(get_worker_manager)]

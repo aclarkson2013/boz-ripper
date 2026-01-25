@@ -10,6 +10,7 @@ from typing import Optional, TYPE_CHECKING
 from boz_server.core.config import settings
 
 if TYPE_CHECKING:
+    from boz_server.services.discord_client import DiscordClient
     from boz_server.services.plex_client import PlexClient
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,15 @@ logger = logging.getLogger(__name__)
 class NASOrganizer:
     """Organizes completed files to NAS storage."""
 
-    def __init__(self, plex_client: Optional["PlexClient"] = None):
+    def __init__(
+        self,
+        plex_client: Optional["PlexClient"] = None,
+        discord_client: Optional["DiscordClient"] = None,
+    ):
         self._nas_mounted = False
         self._mount_path: Optional[Path] = None
         self._plex_client = plex_client
+        self._discord_client = discord_client
 
     async def start(self) -> None:
         """Initialize NAS connection."""
@@ -85,6 +91,13 @@ class NASOrganizer:
             # S19: Trigger Plex library scan after successful organization
             await self._trigger_plex_scan("movie", str(dest_dir))
 
+            # S20: Send Discord notification
+            await self._send_discord_notification(
+                filename=folder_name,
+                destination=str(dest_file),
+                media_type="movie",
+            )
+
             return dest_file
         except Exception as e:
             logger.error(f"Failed to move file to NAS: {e}")
@@ -139,10 +152,42 @@ class NASOrganizer:
             # S19: Trigger Plex library scan after successful organization
             await self._trigger_plex_scan("tv", str(show_dir))
 
+            # S20: Send Discord notification
+            await self._send_discord_notification(
+                filename=filename.replace(source_file.suffix, ""),
+                destination=str(dest_file),
+                media_type="tv",
+            )
+
             return dest_file
         except Exception as e:
             logger.error(f"Failed to move file to NAS: {e}")
             return None
+
+    async def _send_discord_notification(
+        self,
+        filename: str,
+        destination: str,
+        media_type: str,
+    ) -> None:
+        """S20: Send Discord notification after file organization.
+
+        Args:
+            filename: Name of the organized file
+            destination: Destination path
+            media_type: Type of media ("movie" or "tv")
+        """
+        if not self._discord_client:
+            return
+
+        try:
+            await self._discord_client.notify_file_organized(
+                filename=filename,
+                destination=destination,
+                media_type=media_type,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send Discord notification: {e}")
 
     async def _trigger_plex_scan(
         self, media_type: str, path: Optional[str] = None

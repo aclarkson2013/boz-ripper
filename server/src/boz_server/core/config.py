@@ -72,5 +72,12 @@ class Settings(BaseSettings):
     plex_tv_library_id: Optional[str] = None  # Plex library section ID for TV Shows
     plex_scan_delay_seconds: int = 2  # Delay before triggering scan (allows file system to sync)
 
+    # Discord notification settings (S20)
+    discord_enabled: bool = False  # Enable Discord webhook notifications
+    discord_webhook_url: Optional[str] = None  # Discord webhook URL
+    discord_notify_on_complete: bool = True  # Notify when transcode completes
+    discord_notify_on_failure: bool = True  # Notify when job fails
+    discord_notify_on_organized: bool = True  # Notify when file organized to NAS
+
 
 settings = Settings()

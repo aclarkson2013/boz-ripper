@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, ThumbnailStorageDep, WorkerManagerDep
+from boz_server.api.deps import AgentManagerDep, ApiKeyDep, DiscordClientDep, JobQueueDep, ThumbnailStorageDep, WorkerManagerDep
 from boz_server.models.job import Job, JobApprovalRequest, JobCreate, JobStatus, JobUpdate
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,7 @@ async def update_job(
     job_queue: JobQueueDep,
     agent_manager: AgentManagerDep,
     thumbnail_storage: ThumbnailStorageDep,
+    discord_client: DiscordClientDep,
     _: ApiKeyDep,
 ) -> Job:
     """Update a job's status."""
@@ -152,6 +153,25 @@ async def update_job(
                 logger.info(f"Cleaned up thumbnails for completed job {job_id}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup thumbnails for job {job_id}: {e}")
+
+        # S20: Send Discord notification
+        if discord_client:
+            try:
+                if update.status == JobStatus.COMPLETED:
+                    await discord_client.notify_job_complete(
+                        job_id=job_id,
+                        output_name=job.output_name or "Unknown",
+                        job_type=job.job_type.value,
+                    )
+                elif update.status == JobStatus.FAILED:
+                    await discord_client.notify_job_failed(
+                        job_id=job_id,
+                        output_name=job.output_name or "Unknown",
+                        error=update.error or "Unknown error",
+                        job_type=job.job_type.value,
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to send Discord notification: {e}")
 
     return job
 

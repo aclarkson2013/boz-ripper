@@ -123,7 +123,7 @@ Stage 2 is critical because:
 | S17 | Receive transcoded files from workers | P0 | [x] |
 | S18 | Organize files to network shares | P0 | [x] |
 | S19 | Trigger Plex library scan | P1 | [x] |
-| S20 | Send Discord notifications | P1 | [ ] |
+| S20 | Send Discord notifications | P1 | [x] |
 | S21 | Web UI dashboard (jobs, workers, previews) | P0 | [x] |
 
 ---
@@ -437,6 +437,7 @@ workers:
 13. ~~**File Organization**~~ - **IMPLEMENTED** (S18: Auto-organize to network shares with Plex trigger)
 14. ~~**Staging Cleanup**~~ - **IMPLEMENTED** (A17: Delete temp files after upload)
 15. ~~**Auto-eject**~~ - **IMPLEMENTED** (A18: Eject disc on completion)
+16. ~~**Discord Notifications**~~ - **IMPLEMENTED** (S20: Webhook notifications for job complete/fail/organized)
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:
@@ -446,4 +447,4 @@ PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate con
 
 ---
 
-*Last Updated: January 24, 2026 - Phase 5 file organization, staging cleanup, auto-eject, and Plex integration complete*
+*Last Updated: January 24, 2026 - Phase 5 file organization, staging cleanup, auto-eject, Plex integration, and Discord notifications complete*
