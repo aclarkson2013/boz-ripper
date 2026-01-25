@@ -330,6 +330,18 @@ def api_update_season(disc_id: str):
     if result:
         return jsonify(result)
     return jsonify({"error": "Failed to update season/episode"}), 400
+
+
+@app.route("/api/discs/<disc_id>/preview/override-media-type", methods=["POST"])
+def api_override_media_type(disc_id: str):
+    """P6: Override the detected media type (movie <-> TV show)."""
+    data = request.json
+    result = api_request("POST", f"/api/discs/{disc_id}/preview/override-media-type", json=data)
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Failed to override media type"}), 400
+
+
 @app.route("/api/tv-seasons/<season_id>")
 def api_tv_season(season_id: str):
     """Get TV season tracking info."""
