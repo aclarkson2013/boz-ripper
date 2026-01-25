@@ -29,17 +29,17 @@ Extracted from PRD v2.1 (January 18, 2026)
 
 **Solution:** Two-stage preview system that provides visual verification at both pre-rip and pre-transcode stages.
 
-#### Stage 2: Post-Rip Preview (PRIORITY - Implement First) [IN PROGRESS]
+#### Stage 2: Post-Rip Preview (PRIORITY - Implement First) [MOSTLY COMPLETE]
 **When:** After ripping completes, before user approves transcode
 **Goal:** Detailed visual verification with episode name matching
 **Method:** FFmpeg extracts 4 thumbnails per ripped MKV file
 
-- [~] Extract thumbnails from ripped MKV files in staging directory
-- [ ] Send thumbnails to server with rip completion notification
-- [ ] Display 2x2 thumbnail grid in transcode approval modal
+- [x] Extract thumbnails from ripped MKV files in staging directory
+- [x] Send thumbnails to server with rip completion notification
+- [x] Display 2x2 thumbnail grid in transcode approval modal
 - [ ] Add file renaming capability if episode detection was wrong
 - [ ] Add episode number adjustment UI for TV shows
-- [ ] Clean up thumbnails after transcode approval/rejection
+- [x] Clean up thumbnails after transcode approval/rejection
 
 **FFmpeg Command:**
 ```bash

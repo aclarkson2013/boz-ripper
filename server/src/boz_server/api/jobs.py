@@ -132,6 +132,7 @@ async def update_job(
     update: JobUpdate,
     job_queue: JobQueueDep,
     agent_manager: AgentManagerDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep,
 ) -> Job:
     """Update a job's status."""
@@ -139,10 +140,18 @@ async def update_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # If job completed or failed, release the agent
+    # If job completed or failed, release the agent and cleanup thumbnails
     if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
         if job.assigned_agent_id:
             await agent_manager.complete_job(job.assigned_agent_id)
+
+        # Cleanup thumbnails - no longer needed after job finishes
+        if job.thumbnails:
+            try:
+                thumbnail_storage.delete_disc_thumbnails(job_id)
+                logger.info(f"Cleaned up thumbnails for completed job {job_id}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup thumbnails for job {job_id}: {e}")
 
     return job
 
@@ -180,6 +189,7 @@ async def cancel_job(
     job_id: str,
     job_queue: JobQueueDep,
     agent_manager: AgentManagerDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep,
 ) -> dict:
     """Cancel a job."""
@@ -197,6 +207,14 @@ async def cancel_job(
     if job.assigned_agent_id:
         await agent_manager.complete_job(job.assigned_agent_id)
 
+    # Cleanup thumbnails - no longer needed after cancellation
+    if job.thumbnails:
+        try:
+            thumbnail_storage.delete_disc_thumbnails(job_id)
+            logger.info(f"Cleaned up thumbnails for cancelled job {job_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup thumbnails for job {job_id}: {e}")
+
     return {"status": "ok", "job_id": job_id}
 
 
@@ -207,6 +225,7 @@ async def approve_job(
     job_queue: JobQueueDep,
     worker_manager: WorkerManagerDep,
     agent_manager: AgentManagerDep,
+    thumbnail_storage: ThumbnailStorageDep,
     _: ApiKeyDep,
 ) -> dict:
     """Approve a pending transcode job with worker and preset selection."""
@@ -238,6 +257,14 @@ async def approve_job(
     agent = await agent_manager.get(agent_id)
     if agent:
         await agent_manager.assign_job(agent_id, job_id)
+
+    # Cleanup thumbnails - user has verified content, no longer needed
+    if job.thumbnails:
+        try:
+            thumbnail_storage.delete_disc_thumbnails(job_id)
+            logger.info(f"Cleaned up thumbnails for approved job {job_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup thumbnails for job {job_id}: {e}")
 
     return {
         "status": "ok",
