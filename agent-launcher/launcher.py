@@ -39,14 +39,79 @@ if getattr(sys, 'frozen', False):
     LAUNCHER_DIR = Path(sys.executable).parent
     # Go up from dist/ to agent-launcher/, then up to boz-ripper/
     REPO_DIR = LAUNCHER_DIR.parent.parent
+    IS_FROZEN = True
 else:
     # Running as script
     LAUNCHER_DIR = Path(__file__).parent
     REPO_DIR = LAUNCHER_DIR.parent
+    IS_FROZEN = False
 
 AGENT_DIR = REPO_DIR / "agent"
 LOG_FILE = LAUNCHER_DIR / "agent.log"
 LOCK_FILE = Path(tempfile.gettempdir()) / LOCK_FILE_NAME
+
+
+def find_python_executable() -> str:
+    """Find the Python executable to use for running the agent."""
+    if not IS_FROZEN:
+        # Running as script, use the same Python
+        return sys.executable
+
+    # Running as frozen exe, need to find Python
+    # Try common locations
+    possible_paths = [
+        # Check PATH first
+        "python",
+        "python3",
+        # Common Windows install locations
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python313" / "python.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python312" / "python.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python311" / "python.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python310" / "python.exe",
+        Path("C:/Python313/python.exe"),
+        Path("C:/Python312/python.exe"),
+        Path("C:/Python311/python.exe"),
+        Path("C:/Python310/python.exe"),
+    ]
+
+    # Try to find python via 'where' command on Windows
+    try:
+        result = subprocess.run(
+            ["where", "python"],
+            capture_output=True,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        if result.returncode == 0:
+            python_path = result.stdout.strip().split('\n')[0]
+            if python_path and Path(python_path).exists():
+                return python_path
+    except Exception:
+        pass
+
+    # Check each possible path
+    for path in possible_paths:
+        if isinstance(path, str):
+            # It's a command name, try to find it
+            try:
+                result = subprocess.run(
+                    ["where", path],
+                    capture_output=True,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+                if result.returncode == 0:
+                    return result.stdout.strip().split('\n')[0]
+            except Exception:
+                pass
+        elif path.exists():
+            return str(path)
+
+    # Fallback - hope python is in PATH
+    return "python"
+
+
+PYTHON_EXE = find_python_executable()
 
 
 class SingleInstanceChecker:
@@ -300,8 +365,9 @@ class BozRipperLauncher:
             env["PYTHONPATH"] = str(agent_src)
 
             # Start the agent process
+            self.log(f"Using Python: {PYTHON_EXE}")
             self.agent_process = subprocess.Popen(
-                [sys.executable, "-m", "boz_agent", "run"],
+                [PYTHON_EXE, "-m", "boz_agent", "run"],
                 cwd=str(AGENT_DIR),
                 env=env,
                 stdout=self.log_file_handle,
@@ -448,7 +514,7 @@ class BozRipperLauncher:
             requirements_file = AGENT_DIR / "requirements.txt"
             if requirements_file.exists():
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
+                    [PYTHON_EXE, "-m", "pip", "install", "-r", str(requirements_file)],
                     cwd=str(AGENT_DIR),
                     capture_output=True,
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
