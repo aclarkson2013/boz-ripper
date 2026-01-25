@@ -1,6 +1,7 @@
 """Boz Ripper Agent - Windows System Tray Launcher.
 
 A system tray application for managing the Boz Ripper Agent.
+Single instance only - prevents multiple launchers and agents.
 """
 
 import os
@@ -9,6 +10,8 @@ import subprocess
 import threading
 import time
 import webbrowser
+import tempfile
+import ctypes
 from pathlib import Path
 from datetime import datetime
 
@@ -27,6 +30,8 @@ except ImportError:
 # Configuration
 DASHBOARD_URL = "http://10.0.0.60:5000"
 CHECK_INTERVAL = 5  # seconds between health checks
+LOCK_FILE_NAME = "boz_ripper_launcher.lock"
+AGENT_PROCESS_NAME = "boz_agent"
 
 # Detect if running as PyInstaller exe or as script
 if getattr(sys, 'frozen', False):
@@ -41,6 +46,89 @@ else:
 
 AGENT_DIR = REPO_DIR / "agent"
 LOG_FILE = LAUNCHER_DIR / "agent.log"
+LOCK_FILE = Path(tempfile.gettempdir()) / LOCK_FILE_NAME
+
+
+class SingleInstanceChecker:
+    """Ensures only one instance of the launcher runs at a time."""
+
+    def __init__(self):
+        self.lock_file = None
+        self.locked = False
+
+    def try_acquire(self) -> bool:
+        """Try to acquire the single instance lock. Returns True if successful."""
+        try:
+            # Check if lock file exists and if the process is still running
+            if LOCK_FILE.exists():
+                try:
+                    with open(LOCK_FILE, "r") as f:
+                        old_pid = int(f.read().strip())
+
+                    # Check if the old process is still running
+                    if psutil.pid_exists(old_pid):
+                        try:
+                            proc = psutil.Process(old_pid)
+                            # Check if it's actually our launcher
+                            if "python" in proc.name().lower() or "bozripperagent" in proc.name().lower():
+                                return False  # Another instance is running
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass  # Process doesn't exist or can't access, OK to proceed
+                except (ValueError, IOError):
+                    pass  # Invalid lock file, OK to overwrite
+
+            # Create/update lock file with our PID
+            with open(LOCK_FILE, "w") as f:
+                f.write(str(os.getpid()))
+
+            self.locked = True
+            return True
+
+        except Exception:
+            return False
+
+    def release(self):
+        """Release the lock."""
+        if self.locked:
+            try:
+                LOCK_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
+            self.locked = False
+
+
+def find_existing_agent_processes():
+    """Find any existing boz_agent Python processes."""
+    agents = []
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            cmdline = proc.info.get('cmdline') or []
+            cmdline_str = ' '.join(cmdline).lower()
+
+            # Check if this is a boz_agent process
+            if 'boz_agent' in cmdline_str and 'python' in proc.info.get('name', '').lower():
+                agents.append(proc.info['pid'])
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return agents
+
+
+def kill_existing_agents():
+    """Kill any existing boz_agent processes."""
+    agents = find_existing_agent_processes()
+    for pid in agents:
+        try:
+            proc = psutil.Process(pid)
+            proc.terminate()
+            proc.wait(timeout=5)
+        except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+            try:
+                proc.kill()
+            except psutil.NoSuchProcess:
+                pass
+        except Exception:
+            pass
+    return len(agents)
 
 
 class AgentStatus:
@@ -60,9 +148,10 @@ class BozRipperLauncher:
         self.icon = None
         self.monitor_thread = None
         self.running = True
-        self.log_file = None
+        self.log_file_handle = None
+        self.agent_pid = None  # Track the agent PID we started
 
-        # Ensure log file exists
+        # Ensure log directory exists
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     def create_icon_image(self, color: str) -> Image.Image:
@@ -146,26 +235,42 @@ class BozRipperLauncher:
 
     def is_agent_running(self) -> bool:
         """Check if the agent process is still running."""
-        if self.agent_process is None:
-            return False
+        # First check our tracked process
+        if self.agent_process is not None:
+            poll = self.agent_process.poll()
+            if poll is None:
+                # Process is still running
+                try:
+                    proc = psutil.Process(self.agent_process.pid)
+                    if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                        return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
 
-        # Check if process is still alive
-        poll = self.agent_process.poll()
-        if poll is not None:
-            return False
+        # Also check by PID if we have one
+        if self.agent_pid:
+            try:
+                proc = psutil.Process(self.agent_pid)
+                if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
 
-        # Double-check with psutil
-        try:
-            proc = psutil.Process(self.agent_process.pid)
-            return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            return False
+        return False
 
     def start_agent(self, icon=None, item=None):
         """Start the Boz Ripper Agent."""
+        # Check if already running (our process)
         if self.is_agent_running():
             self.notify("Agent Already Running", "The agent is already running.")
             return
+
+        # Check for any other agent processes
+        existing = find_existing_agent_processes()
+        if existing:
+            self.log(f"Found {len(existing)} existing agent process(es), killing them...")
+            kill_existing_agents()
+            time.sleep(1)
 
         self.status = AgentStatus.STARTING
         self.update_icon()
@@ -179,8 +284,15 @@ class BozRipperLauncher:
                 self.update_icon()
                 return
 
+            # Close any existing log file handle
+            if self.log_file_handle:
+                try:
+                    self.log_file_handle.close()
+                except:
+                    pass
+
             # Open log file for agent output
-            self.log_file = open(LOG_FILE, "a", encoding="utf-8")
+            self.log_file_handle = open(LOG_FILE, "a", encoding="utf-8")
 
             # Set up environment with PYTHONPATH pointing to agent/src
             env = os.environ.copy()
@@ -192,17 +304,19 @@ class BozRipperLauncher:
                 [sys.executable, "-m", "boz_agent", "run"],
                 cwd=str(AGENT_DIR),
                 env=env,
-                stdout=self.log_file,
+                stdout=self.log_file_handle,
                 stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
+
+            self.agent_pid = self.agent_process.pid
 
             # Wait a moment and check if it started successfully
             time.sleep(2)
 
             if self.is_agent_running():
                 self.status = AgentStatus.RUNNING
-                self.log(f"Agent started with PID {self.agent_process.pid}")
+                self.log(f"Agent started with PID {self.agent_pid}")
                 self.notify("Agent Started", "Boz Ripper Agent is now running.")
             else:
                 self.status = AgentStatus.STOPPED
@@ -219,7 +333,13 @@ class BozRipperLauncher:
     def stop_agent(self, icon=None, item=None):
         """Stop the Boz Ripper Agent."""
         if not self.is_agent_running():
-            self.notify("Agent Not Running", "The agent is not currently running.")
+            # Also kill any orphaned agents
+            existing = find_existing_agent_processes()
+            if existing:
+                self.log(f"Killing {len(existing)} orphaned agent process(es)...")
+                kill_existing_agents()
+            else:
+                self.notify("Agent Not Running", "The agent is not currently running.")
             self.status = AgentStatus.STOPPED
             self.update_icon()
             return
@@ -227,61 +347,66 @@ class BozRipperLauncher:
         self.log("Stopping agent...")
 
         try:
-            # Try graceful termination first
-            process = psutil.Process(self.agent_process.pid)
+            pid_to_kill = self.agent_pid or (self.agent_process.pid if self.agent_process else None)
 
-            # Terminate child processes first
-            children = process.children(recursive=True)
-            for child in children:
-                try:
-                    child.terminate()
-                except psutil.NoSuchProcess:
-                    pass
+            if pid_to_kill:
+                process = psutil.Process(pid_to_kill)
 
-            # Terminate main process
-            process.terminate()
-
-            # Wait for graceful shutdown
-            try:
-                process.wait(timeout=10)
-            except psutil.TimeoutExpired:
-                # Force kill if still running
-                self.log("Agent not responding, forcing kill...")
-                process.kill()
+                # Terminate child processes first
+                children = process.children(recursive=True)
                 for child in children:
                     try:
-                        child.kill()
+                        child.terminate()
                     except psutil.NoSuchProcess:
                         pass
 
+                # Terminate main process
+                process.terminate()
+
+                # Wait for graceful shutdown
+                try:
+                    process.wait(timeout=10)
+                except psutil.TimeoutExpired:
+                    # Force kill if still running
+                    self.log("Agent not responding, forcing kill...")
+                    process.kill()
+                    for child in children:
+                        try:
+                            child.kill()
+                        except psutil.NoSuchProcess:
+                            pass
+
             self.agent_process = None
+            self.agent_pid = None
             self.status = AgentStatus.STOPPED
             self.log("Agent stopped")
             self.notify("Agent Stopped", "Boz Ripper Agent has been stopped.")
 
+        except psutil.NoSuchProcess:
+            self.log("Agent process already terminated")
+            self.agent_process = None
+            self.agent_pid = None
+            self.status = AgentStatus.STOPPED
         except Exception as e:
             self.log(f"Error stopping agent: {e}")
             self.notify("Error", f"Failed to stop agent: {e}")
 
-        # Close log file
-        if self.log_file:
+        # Close log file handle
+        if self.log_file_handle:
             try:
-                self.log_file.close()
+                self.log_file_handle.close()
             except:
                 pass
-            self.log_file = None
+            self.log_file_handle = None
 
         self.update_icon()
 
     def restart_agent(self, icon=None, item=None):
         """Restart the Boz Ripper Agent."""
         self.log("Restarting agent...")
-        was_running = self.is_agent_running()
 
-        if was_running:
-            self.stop_agent()
-            time.sleep(2)
-
+        self.stop_agent()
+        time.sleep(2)
         self.start_agent()
 
     def check_for_updates(self, icon=None, item=None):
@@ -310,7 +435,6 @@ class BozRipperLauncher:
 
             if local_commit == remote_commit:
                 self.log("Already up to date")
-                self.notify("No Updates", "Boz Ripper is already up to date.")
                 self.status = previous_status
                 self.update_icon()
                 return
@@ -337,14 +461,13 @@ class BozRipperLauncher:
             if was_running:
                 self.log("Restarting agent after update...")
                 time.sleep(1)
-                self.start_agent()
+                self.restart_agent()
             else:
                 self.status = AgentStatus.STOPPED
                 self.update_icon()
 
         except Exception as e:
             self.log(f"Update error: {e}")
-            self.notify("Update Failed", f"Failed to update: {e}")
             self.status = previous_status
             self.update_icon()
 
@@ -390,9 +513,10 @@ class BozRipperLauncher:
                     self.log("Agent crashed or stopped unexpectedly!")
                     self.notify("Agent Crashed", "The agent has stopped unexpectedly. Check logs for details.")
                     self.agent_process = None
+                    self.agent_pid = None
 
                 elif self.status == AgentStatus.STOPPED and current_running:
-                    # Agent started externally
+                    # Agent started externally (shouldn't happen with single instance)
                     self.status = AgentStatus.RUNNING
                     self.update_icon()
 
@@ -438,7 +562,13 @@ class BozRipperLauncher:
         self.log(f"Agent directory: {AGENT_DIR}")
         self.log(f"Repository directory: {REPO_DIR}")
 
-        # Check for updates on startup
+        # Kill any orphaned agents from previous runs
+        existing = find_existing_agent_processes()
+        if existing:
+            self.log(f"Cleaning up {len(existing)} orphaned agent process(es)...")
+            kill_existing_agents()
+
+        # Check for updates on startup (in background, don't notify if up to date)
         if GIT_AVAILABLE:
             threading.Thread(target=self.check_for_updates, daemon=True).start()
 
@@ -457,7 +587,7 @@ class BozRipperLauncher:
         self.log("Launcher ready")
         self.notify("Launcher Started", "Boz Ripper Agent Launcher is running.")
 
-        # Auto-start agent on launch
+        # Auto-start agent on launch (after a delay for update check)
         threading.Thread(target=self._delayed_start, daemon=True).start()
 
         # Run the icon (blocking)
@@ -472,14 +602,32 @@ class BozRipperLauncher:
 
 def main():
     """Main entry point."""
-    launcher = BozRipperLauncher()
+    # Check for single instance
+    instance_checker = SingleInstanceChecker()
+
+    if not instance_checker.try_acquire():
+        # Another instance is already running
+        # Show a message box on Windows
+        if sys.platform == "win32":
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "Boz Ripper Agent Launcher is already running.\n\nCheck your system tray for the icon.",
+                "Already Running",
+                0x40  # MB_ICONINFORMATION
+            )
+        else:
+            print("Boz Ripper Agent Launcher is already running.")
+        sys.exit(0)
+
     try:
+        launcher = BozRipperLauncher()
         launcher.run()
     except KeyboardInterrupt:
-        launcher.exit_app()
+        pass
     except Exception as e:
         print(f"Fatal error: {e}")
-        launcher.exit_app()
+    finally:
+        instance_checker.release()
 
 
 if __name__ == "__main__":
