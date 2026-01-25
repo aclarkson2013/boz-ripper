@@ -107,7 +107,7 @@ Stage 2 is critical because:
 | S1 | Receive track analysis from agent | P0 | [x] |
 | S2 | Detect TV show vs movie from disc name | P0 | [x] |
 | S3 | Query TheTVDB for TV show metadata | P0 | [x] |
-| S4 | Query OMDb for movie metadata | P1 | [ ] |
+| S4 | Query OMDb for movie metadata | P1 | [x] |
 | S5 | Generate preview with proposed filenames | P0 | [x] |
 | S6 | Track multi-disc TV seasons (episode continuation) | P0 | [x] |
 | S7 | Filter extras/bloopers from episodes | P0 | [x] |
@@ -118,7 +118,7 @@ Stage 2 is critical because:
 | S12 | Support worker priorities (1-99) | P0 | [x] |
 | S13 | Handle worker failover automatically | P1 | [ ] |
 | S14 | Provide worker management UI | P1 | [x] |
-| S15 | Queue jobs in SQLite database | P0 | [ ] |
+| S15 | Queue jobs in SQLite database | P0 | [x] |
 | S16 | Process jobs sequentially or parallel (configurable) | P0 | [x] |
 | S17 | Receive transcoded files from workers | P0 | [x] |
 | S18 | Organize files to network shares | P0 | [x] |
