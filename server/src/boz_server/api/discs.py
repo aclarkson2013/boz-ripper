@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from boz_server.api.deps import AgentManagerDep, ApiKeyDep, JobQueueDep, PreviewGeneratorDep, ThumbnailStorageDep
-from boz_server.models.disc import Disc, DiscDetected, DiscEjected, DiscType, PreviewStatus, Title
+from boz_server.models.disc import Disc, DiscDetected, DiscEjected, DiscType, MediaType, PreviewStatus, Title
 from boz_server.models.tv_show import TVSeason
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,17 @@ class SeasonEpisodeUpdate(BaseModel):
     """Request to update season and starting episode."""
     season_number: int
     starting_episode: int = 1
+
+class MediaTypeOverride(BaseModel):
+    """P6: Request to override media type detection."""
+    media_type: str  # "movie" or "tv_show"
+    # For TV shows
+    show_name: str | None = None
+    season_number: int | None = None
+    starting_episode: int | None = None
+    # For movies
+    movie_title: str | None = None
+    movie_year: int | None = None
 
 
 router = APIRouter(prefix="/api/discs", tags=["discs"])
@@ -309,6 +320,123 @@ async def update_season_and_episode(
     disc = await job_queue.update_disc(disc)
 
     return disc
+
+
+@router.post("/{disc_id}/preview/override-media-type")
+async def override_media_type(
+    disc_id: str,
+    request: MediaTypeOverride,
+    job_queue: JobQueueDep,
+    preview_generator: PreviewGeneratorDep,
+    _: ApiKeyDep = None,
+) -> Disc:
+    """P6: Override the detected media type (movie <-> TV show).
+
+    When switching to TV show, provide show_name, season_number, starting_episode.
+    When switching to movie, optionally provide movie_title and movie_year.
+    """
+    disc = await job_queue.get_disc(disc_id)
+    if not disc:
+        raise HTTPException(status_code=404, detail="Disc not found")
+
+    old_type = disc.media_type
+    new_type = MediaType(request.media_type)
+
+    logger.info(f"P6: Overriding media type for disc {disc_id}: {old_type} -> {new_type}")
+
+    if new_type == MediaType.TV_SHOW:
+        # Switching to TV show
+        if not request.show_name:
+            raise HTTPException(status_code=400, detail="show_name required for TV show")
+
+        disc.media_type = MediaType.TV_SHOW
+        disc.tv_show_name = request.show_name
+        disc.tv_season_number = request.season_number or 1
+        disc.starting_episode_number = request.starting_episode or 1
+
+        # Clear movie fields
+        disc.movie_title = None
+        disc.movie_year = None
+        disc.omdb_imdb_id = None
+
+        # Get or create season tracker
+        tv_season = await preview_generator.get_or_create_season(
+            request.show_name,
+            disc.tv_season_number
+        )
+        disc.tv_season_id = tv_season.season_id
+
+        # Try to fetch episodes from TheTVDB
+        if preview_generator.thetvdb_client:
+            series = await preview_generator.thetvdb_client.search_series(request.show_name)
+            if series:
+                disc.thetvdb_series_id = series.get("id")
+                episodes = await preview_generator.thetvdb_client.get_season_episodes(
+                    disc.thetvdb_series_id,
+                    disc.tv_season_number
+                )
+                if episodes:
+                    tv_season.episodes = episodes
+                    await preview_generator.update_season_episodes(
+                        tv_season.season_id, episodes, disc.thetvdb_series_id
+                    )
+                    logger.info(f"Loaded {len(episodes)} episodes from TheTVDB for {request.show_name}")
+
+        # Match episodes to titles
+        main_titles = preview_generator.extras_filter.get_main_titles(disc.titles)
+        if main_titles:
+            preview_generator.episode_matcher.match_episodes(
+                main_titles,
+                tv_season,
+                starting_episode=disc.starting_episode_number
+            )
+
+        # Re-generate filenames
+        for title in disc.titles:
+            preview_generator.media_namer.apply_naming(
+                title,
+                MediaType.TV_SHOW,
+                show_name=disc.tv_show_name,
+                season_number=disc.tv_season_number,
+            )
+
+        logger.info(f"✓ Changed to TV Show: {request.show_name} S{disc.tv_season_number:02d}")
+
+    elif new_type == MediaType.MOVIE:
+        # Switching to movie
+        disc.media_type = MediaType.MOVIE
+        disc.movie_title = request.movie_title or disc.disc_name
+        disc.movie_year = request.movie_year
+
+        # Clear TV fields
+        disc.tv_show_name = None
+        disc.tv_season_number = None
+        disc.tv_season_id = None
+        disc.thetvdb_series_id = None
+        disc.starting_episode_number = None
+
+        # Re-generate filenames as movie
+        movie_name = disc.movie_title
+        if disc.movie_year:
+            movie_name = f"{disc.movie_title} ({disc.movie_year})"
+
+        for title in disc.titles:
+            title.episode_number = None
+            title.episode_title = None
+            preview_generator.media_namer.apply_naming(
+                title,
+                MediaType.MOVIE,
+                movie_name=movie_name,
+            )
+
+        logger.info(f"✓ Changed to Movie: {movie_name}")
+
+    # Save updates
+    disc = await job_queue.update_disc(disc)
+
+    return disc
+
+
 @router.get("/tv-seasons/{season_id}", response_model=TVSeason)
 async def get_tv_season(
     season_id: str,

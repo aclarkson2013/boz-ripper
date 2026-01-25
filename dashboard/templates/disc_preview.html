@@ -154,6 +154,88 @@
         border-color: var(--boz-primary);
     }
 
+    /* P6: Media type override controls */
+    .media-type-override {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #334155;
+    }
+
+    .media-type-override label {
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+
+    .media-type-override select {
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #e2e8f0;
+        padding: 0.5rem 1rem;
+        border-radius: 0.375rem;
+        cursor: pointer;
+    }
+
+    .override-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .override-modal.active {
+        display: flex;
+    }
+
+    .override-modal-content {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        width: 100%;
+        max-width: 500px;
+    }
+
+    .override-modal h3 {
+        margin-bottom: 1.5rem;
+        color: #e2e8f0;
+    }
+
+    .override-form-group {
+        margin-bottom: 1rem;
+    }
+
+    .override-form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+
+    .override-form-group input,
+    .override-form-group select {
+        width: 100%;
+        background: #0f172a;
+        border: 1px solid #334155;
+        color: #e2e8f0;
+        padding: 0.75rem;
+        border-radius: 0.375rem;
+    }
+
+    .override-modal-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
     .action-buttons {
         display: flex;
         gap: 1rem;
@@ -443,6 +525,50 @@
             </a>
         </div>
     </div>
+
+    <!-- P6: Media Type Override Modal -->
+    <div id="override-modal" class="override-modal">
+        <div class="override-modal-content">
+            <h3 id="override-modal-title">Override Media Type</h3>
+
+            <!-- TV Show Fields -->
+            <div id="tv-override-fields" style="display: none;">
+                <div class="override-form-group">
+                    <label for="override-show-name">Show Name *</label>
+                    <input type="text" id="override-show-name" placeholder="e.g., The Office">
+                </div>
+                <div class="override-form-group">
+                    <label for="override-season">Season Number</label>
+                    <input type="number" id="override-season" value="1" min="1">
+                </div>
+                <div class="override-form-group">
+                    <label for="override-episode">Starting Episode</label>
+                    <input type="number" id="override-episode" value="1" min="1">
+                </div>
+            </div>
+
+            <!-- Movie Fields -->
+            <div id="movie-override-fields" style="display: none;">
+                <div class="override-form-group">
+                    <label for="override-movie-title">Movie Title</label>
+                    <input type="text" id="override-movie-title" placeholder="Leave blank to use disc name">
+                </div>
+                <div class="override-form-group">
+                    <label for="override-movie-year">Year (optional)</label>
+                    <input type="number" id="override-movie-year" placeholder="e.g., 2023" min="1900" max="2100">
+                </div>
+            </div>
+
+            <div class="override-modal-buttons">
+                <button id="btn-apply-override" class="btn-approve">
+                    <i class="bi bi-check"></i> Apply
+                </button>
+                <button id="btn-cancel-override" class="btn-cancel">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -514,6 +640,15 @@
                         <span><i class="bi bi-disc"></i> ${discData.disc_type}</span>
                         <span class="ms-3"><i class="bi bi-list-ol"></i> ${discData.titles.length} titles</span>
                         <span class="ms-3"><i class="bi bi-clock"></i> Detected ${formatTimeAgo(discData.detected_at)}</span>
+                    </div>
+                    <!-- P6: Media Type Override -->
+                    <div class="media-type-override">
+                        <label>Wrong detection?</label>
+                        <select id="media-type-select" onchange="showOverrideModal(this.value)">
+                            <option value="">Change type...</option>
+                            <option value="movie" ${discData.media_type === 'movie' ? 'disabled' : ''}>Switch to Movie</option>
+                            <option value="tv_show" ${discData.media_type === 'tv_show' ? 'disabled' : ''}>Switch to TV Show</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -764,6 +899,102 @@
             alert('Failed to reject preview: ' + error.message);
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-x-circle"></i> Reject';
+        }
+    });
+
+    // P6: Media Type Override Functions
+    let pendingMediaType = null;
+
+    function showOverrideModal(mediaType) {
+        if (!mediaType) return;
+
+        pendingMediaType = mediaType;
+        const modal = document.getElementById('override-modal');
+        const tvFields = document.getElementById('tv-override-fields');
+        const movieFields = document.getElementById('movie-override-fields');
+        const title = document.getElementById('override-modal-title');
+
+        if (mediaType === 'tv_show') {
+            title.textContent = 'Switch to TV Show';
+            tvFields.style.display = 'block';
+            movieFields.style.display = 'none';
+            // Pre-fill with disc name as show name guess
+            document.getElementById('override-show-name').value = discData.disc_name.replace(/_/g, ' ');
+        } else {
+            title.textContent = 'Switch to Movie';
+            tvFields.style.display = 'none';
+            movieFields.style.display = 'block';
+            // Pre-fill with existing movie title or disc name
+            document.getElementById('override-movie-title').value = discData.movie_title || '';
+            document.getElementById('override-movie-year').value = discData.movie_year || '';
+        }
+
+        modal.classList.add('active');
+        // Reset the select
+        document.getElementById('media-type-select').value = '';
+    }
+
+    document.getElementById('btn-cancel-override').addEventListener('click', () => {
+        document.getElementById('override-modal').classList.remove('active');
+        pendingMediaType = null;
+    });
+
+    document.getElementById('btn-apply-override').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-apply-override');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> Applying...';
+
+        try {
+            let payload = { media_type: pendingMediaType };
+
+            if (pendingMediaType === 'tv_show') {
+                const showName = document.getElementById('override-show-name').value.trim();
+                if (!showName) {
+                    alert('Show name is required');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check"></i> Apply';
+                    return;
+                }
+                payload.show_name = showName;
+                payload.season_number = parseInt(document.getElementById('override-season').value) || 1;
+                payload.starting_episode = parseInt(document.getElementById('override-episode').value) || 1;
+            } else {
+                const movieTitle = document.getElementById('override-movie-title').value.trim();
+                const movieYear = document.getElementById('override-movie-year').value;
+                if (movieTitle) payload.movie_title = movieTitle;
+                if (movieYear) payload.movie_year = parseInt(movieYear);
+            }
+
+            const response = await fetch(`/api/discs/${discId}/preview/override-media-type`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to override media type');
+            }
+
+            // Reload the preview with new data
+            document.getElementById('override-modal').classList.remove('active');
+            await loadDiscPreview();
+            showToast('Success', `Changed to ${pendingMediaType === 'tv_show' ? 'TV Show' : 'Movie'}`, 'success');
+        } catch (error) {
+            console.error('Error overriding media type:', error);
+            alert('Failed to override media type: ' + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check"></i> Apply';
+            pendingMediaType = null;
+        }
+    });
+
+    // Close modal on outside click
+    document.getElementById('override-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'override-modal') {
+            document.getElementById('override-modal').classList.remove('active');
+            pendingMediaType = null;
         }
     });
 </script>

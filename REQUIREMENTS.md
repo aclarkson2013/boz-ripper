@@ -176,9 +176,9 @@ Tracks matching these patterns should be flagged as extras:
 | P3 | Show destination paths | P0 | [x] |
 | P4 | Allow track selection (include/exclude) | P0 | [x] |
 | P5 | Allow filename editing | P1 | [x] |
-| P6 | Allow media type override (movie/TV) | P1 | [~] |
+| P6 | Allow media type override (movie/TV) | P1 | [x] |
 | P7 | Require explicit approval before ripping | P0 | [x] |
-| P8 | Support auto-approve mode (optional) | P2 | [~] |
+| P8 | Support auto-approve mode (optional) | P2 | [x] |
 
 ### 5.1 Transcode Approval Workflow [IMPLEMENTED]
 
