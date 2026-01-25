@@ -382,6 +382,25 @@ def api_thumbnails(filepath: str):
         return Response("Failed to fetch thumbnail", status=500)
 
 
+@app.route("/api/vlc/preview", methods=["POST"])
+def api_vlc_preview():
+    """Queue a VLC preview request for an agent."""
+    data = request.get_json() or {}
+    result = api_request("POST", "/api/vlc/preview", json=data)
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Failed to queue VLC preview"}), 400
+
+
+@app.route("/api/vlc/commands/<command_id>/status")
+def api_vlc_command_status(command_id: str):
+    """Get status of a VLC command."""
+    result = api_request("GET", f"/api/vlc/commands/{command_id}/status")
+    if result:
+        return jsonify(result)
+    return jsonify({"error": "Command not found"}), 404
+
+
 # -----------------------------------------------------------------------------
 # Error Handlers
 # -----------------------------------------------------------------------------

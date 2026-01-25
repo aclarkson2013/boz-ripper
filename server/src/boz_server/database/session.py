@@ -64,6 +64,7 @@ async def init_db() -> None:
             TitleORM,
             TVEpisodeORM,
             TVSeasonORM,
+            VLCCommandORM,
             WorkerORM,
         )
 

@@ -10,6 +10,8 @@ from boz_agent.core.config import Settings
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
 from boz_agent.services.thumbnail_extractor import ThumbnailExtractor
+from boz_agent.services.vlc_detector import VLCInfo
+from boz_agent.services.vlc_launcher import launch_vlc
 from boz_agent.services.worker import WorkerService, TranscodeJob
 
 logger = structlog.get_logger()
@@ -24,6 +26,7 @@ class JobRunner:
         server_client: ServerClient,
         makemkv: MakeMKVService,
         on_disc_rips_complete: Optional[Callable[[str, str], Coroutine[Any, Any, None]]] = None,
+        vlc_info: Optional[VLCInfo] = None,
     ):
         """Initialize the job runner.
 
@@ -33,11 +36,13 @@ class JobRunner:
             makemkv: MakeMKV service for ripping
             on_disc_rips_complete: A18 callback when all rips for a disc finish.
                                    Called with (disc_id, drive) args.
+            vlc_info: VLC installation info for preview support
         """
         self.settings = settings
         self.server_client = server_client
         self.makemkv = makemkv
         self.on_disc_rips_complete = on_disc_rips_complete
+        self.vlc_info = vlc_info
 
         # Thumbnail extractor for Stage 2 post-rip preview
         self.thumbnail_extractor = ThumbnailExtractor(settings.thumbnails)
@@ -91,6 +96,9 @@ class JobRunner:
         """Poll for jobs and execute them."""
         while self._running:
             try:
+                # Check for VLC commands (non-blocking, handled first)
+                await self._process_vlc_commands()
+
                 # Get assigned jobs
                 jobs = await self.server_client.get_pending_jobs()
 
@@ -306,6 +314,64 @@ class JobRunner:
                 disc_id=disc_id,
                 error=str(e),
             )
+
+    async def _process_vlc_commands(self) -> None:
+        """Process any pending VLC preview commands from the server.
+
+        VLC1: Fetches pending commands and launches VLC for each.
+        VLC is launched as a detached process so it doesn't block the agent.
+        """
+        # Skip if VLC is not installed
+        if not self.vlc_info or not self.vlc_info.installed:
+            return
+
+        # Skip if VLC preview is disabled
+        if not self.settings.vlc.enabled:
+            return
+
+        try:
+            commands = await self.server_client.get_pending_vlc_commands()
+
+            for cmd in commands:
+                command_id = cmd.get("command_id")
+                file_path = cmd.get("file_path")
+                fullscreen = cmd.get("fullscreen", self.settings.vlc.fullscreen)
+
+                logger.info(
+                    "vlc_command_received",
+                    command_id=command_id,
+                    file_path=file_path,
+                )
+
+                # Launch VLC
+                result = launch_vlc(
+                    vlc_path=self.vlc_info.path,
+                    file_path=file_path,
+                    fullscreen=fullscreen,
+                )
+
+                # Report result back to server
+                await self.server_client.complete_vlc_command(
+                    command_id=command_id,
+                    success=result.success,
+                    error=result.error,
+                )
+
+                if result.success:
+                    logger.info(
+                        "vlc_launched",
+                        command_id=command_id,
+                        pid=result.pid,
+                    )
+                else:
+                    logger.warning(
+                        "vlc_launch_failed",
+                        command_id=command_id,
+                        error=result.error,
+                    )
+
+        except Exception as e:
+            logger.debug("vlc_command_processing_error", error=str(e))
 
     async def _execute_transcode_job(self, job: dict) -> None:
         """Execute a transcode job using HandBrake."""

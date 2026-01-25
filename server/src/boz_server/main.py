@@ -10,6 +10,7 @@ from boz_server import __version__
 from boz_server.api import agents_router, discs_router, files_router, jobs_router
 from boz_server.api.workers import router as workers_router
 from boz_server.api.thumbnails import router as thumbnails_router
+from boz_server.api.vlc import router as vlc_router
 from boz_server.api.deps import init_services
 from boz_server.core.config import settings
 from boz_server.database import init_db
@@ -158,6 +159,7 @@ app.include_router(files_router)
 app.include_router(jobs_router)
 app.include_router(workers_router)
 app.include_router(thumbnails_router)
+app.include_router(vlc_router)
 
 
 @app.get("/")

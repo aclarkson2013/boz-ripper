@@ -88,6 +88,14 @@ class HandBrakeConfig(BaseModel):
     presets_dir: Optional[str] = None
 
 
+class VLCConfig(BaseModel):
+    """VLC preview configuration."""
+
+    enabled: bool = True
+    executable: Optional[str] = None  # Auto-detected if not set
+    fullscreen: bool = True
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration."""
 
@@ -113,6 +121,7 @@ class Settings(BaseSettings):
     thumbnails: ThumbnailConfig = Field(default_factory=ThumbnailConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     handbrake: HandBrakeConfig = Field(default_factory=HandBrakeConfig)
+    vlc: VLCConfig = Field(default_factory=VLCConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @classmethod

@@ -7,7 +7,8 @@ from uuid import uuid4
 import httpx
 import structlog
 
-from boz_agent.core.config import AgentConfig, ServerConfig, WorkerConfig
+from boz_agent.core.config import AgentConfig, ServerConfig, VLCConfig, WorkerConfig
+from boz_agent.services.vlc_detector import VLCInfo
 
 logger = structlog.get_logger()
 
@@ -414,12 +415,14 @@ class ServerClient:
         self,
         worker_config: WorkerConfig,
         agent_name: str,
+        vlc_info: Optional[VLCInfo] = None,
     ) -> Optional[str]:
         """Register this agent as a transcoding worker.
 
         Args:
             worker_config: Worker configuration
             agent_name: Name for the worker
+            vlc_info: VLC installation info (optional)
 
         Returns:
             Worker ID if successful
@@ -442,20 +445,33 @@ class ServerClient:
         # Detect CPU threads
         cpu_threads = os.cpu_count() or 4
 
+        # Build capabilities dict
+        capabilities = {
+            "nvenc": worker_config.nvenc,
+            "nvenc_generation": 8 if worker_config.nvenc else 0,  # Assume RTX 40 series
+            "qsv": worker_config.qsv,
+            "vaapi": False,
+            "hevc": worker_config.hevc,
+            "av1": worker_config.av1,
+            "cpu_threads": cpu_threads,
+            "max_concurrent": worker_config.max_concurrent_jobs,
+        }
+
+        # Add VLC info if available
+        if vlc_info and vlc_info.installed:
+            capabilities["vlc_installed"] = True
+            capabilities["vlc_path"] = vlc_info.path
+            capabilities["vlc_version"] = vlc_info.version
+        else:
+            capabilities["vlc_installed"] = False
+            capabilities["vlc_path"] = None
+            capabilities["vlc_version"] = None
+
         payload = {
             "worker_id": worker_id,
             "worker_type": "agent",
             "hostname": socket.gethostname(),
-            "capabilities": {
-                "nvenc": worker_config.nvenc,
-                "nvenc_generation": 8 if worker_config.nvenc else 0,  # Assume RTX 40 series
-                "qsv": worker_config.qsv,
-                "vaapi": False,
-                "hevc": worker_config.hevc,
-                "av1": worker_config.av1,
-                "cpu_threads": cpu_threads,
-                "max_concurrent": worker_config.max_concurrent_jobs,
-            },
+            "capabilities": capabilities,
             "priority": worker_config.priority,
             "agent_id": self._agent_id,  # Link worker to agent for job assignment
         }
@@ -703,3 +719,53 @@ class ServerClient:
         if job:
             return job.get("status") == "cancelled"
         return False
+
+    # VLC preview methods
+
+    async def get_pending_vlc_commands(self) -> list[dict]:
+        """Get pending VLC commands for this agent.
+
+        Returns:
+            List of pending VLC command dicts
+        """
+        if not self._agent_id:
+            return []
+
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/api/vlc/commands/{self._agent_id}")
+            response.raise_for_status()
+            data = response.json()
+            return data.get("commands", [])
+        except Exception as e:
+            logger.debug("get_vlc_commands_failed", error=str(e))
+            return []
+
+    async def complete_vlc_command(
+        self,
+        command_id: str,
+        success: bool = True,
+        error: Optional[str] = None,
+    ) -> bool:
+        """Report completion of a VLC command.
+
+        Args:
+            command_id: Command ID
+            success: Whether VLC launched successfully
+            error: Error message if failed
+
+        Returns:
+            True if reported successfully
+        """
+        try:
+            client = await self._get_client()
+            response = await client.post(
+                f"/api/vlc/commands/{command_id}/complete",
+                json={"success": success, "error": error},
+            )
+            response.raise_for_status()
+            logger.info("vlc_command_completed", command_id=command_id, success=success)
+            return True
+        except Exception as e:
+            logger.warning("vlc_command_complete_failed", command_id=command_id, error=str(e))
+            return False

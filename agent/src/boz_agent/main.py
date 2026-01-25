@@ -16,6 +16,7 @@ from boz_agent.services.disc_detector import DiscDetector
 from boz_agent.services.job_runner import JobRunner
 from boz_agent.services.makemkv import MakeMKVService
 from boz_agent.services.server_client import ServerClient
+from boz_agent.services.vlc_detector import VLCInfo, detect_vlc
 
 app = typer.Typer(
     name="boz-agent",
@@ -33,6 +34,14 @@ class Agent:
         self.running = False
         self._worker_id: Optional[str] = None
 
+        # Detect VLC early so it can be used by services
+        self._vlc_info: Optional[VLCInfo] = None
+        if settings.vlc.enabled:
+            self._vlc_info = detect_vlc()
+            # Use configured path if specified
+            if self._vlc_info.installed and settings.vlc.executable:
+                self._vlc_info.path = settings.vlc.executable
+
         # Initialize services
         self.server_client = ServerClient(settings.server)
         self.makemkv = MakeMKVService(settings.makemkv)
@@ -46,6 +55,7 @@ class Agent:
             server_client=self.server_client,
             makemkv=self.makemkv,
             on_disc_rips_complete=self.handle_disc_rips_complete,
+            vlc_info=self._vlc_info,
         )
 
     async def start(self) -> None:
@@ -57,6 +67,17 @@ class Agent:
             version=__version__,
             worker_enabled=self.settings.worker.enabled,
         )
+
+        # Log VLC detection status
+        if self.settings.vlc.enabled:
+            if self._vlc_info and self._vlc_info.installed:
+                logger.info(
+                    "vlc_detected",
+                    path=self._vlc_info.path,
+                    version=self._vlc_info.version,
+                )
+            else:
+                logger.info("vlc_not_detected")
 
         # Register with server as agent
         await self.server_client.register(self.settings.agent)
@@ -79,6 +100,7 @@ class Agent:
         worker_id = await self.server_client.register_worker(
             worker_config=self.settings.worker,
             agent_name=self.settings.agent.name,
+            vlc_info=self._vlc_info,
         )
 
         if worker_id:

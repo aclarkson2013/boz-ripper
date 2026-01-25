@@ -42,6 +42,11 @@ class WorkerCapabilities(BaseModel):
     # Capacity
     max_concurrent: int = 2
 
+    # VLC preview support
+    vlc_installed: bool = False
+    vlc_path: Optional[str] = None
+    vlc_version: Optional[str] = None
+
 
 class WorkerRegistration(BaseModel):
     """Request to register a new worker."""

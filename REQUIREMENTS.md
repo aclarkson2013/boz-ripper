@@ -73,6 +73,40 @@ Stage 2 is critical because:
 - Works perfectly with unencrypted MKV files
 - Allows user to fix episode names/numbers before committing
 
+### VLC1 - Full Video Preview Feature [COMPLETE]
+
+**Purpose:** Allow users to preview full video files with VLC Media Player before approving transcodes. This addresses the limitation of thumbnail-only previews for verifying content (especially for 40GB+ Blu-ray files).
+
+**Architecture:** Command Relay via Polling
+- Dashboard requests VLC preview via server API
+- Server queues command for the target agent
+- Agent picks up command on next poll cycle (within 5 seconds)
+- Agent launches VLC with the file path as a detached process
+- Agent reports completion to server
+
+**Implementation:**
+- [x] VLC detector service (checks Windows registry and common paths)
+- [x] VLC launcher service (launches VLC as detached process)
+- [x] VLC config in agent settings (enabled, executable path, fullscreen)
+- [x] Worker capabilities extended with vlc_installed, vlc_path, vlc_version
+- [x] VLC command database model (vlc_commands table)
+- [x] Server VLC API endpoints (/api/vlc/preview, /api/vlc/commands)
+- [x] Agent polls for VLC commands in job runner loop
+- [x] Dashboard "Preview with VLC" button in transcode approval modal
+
+**Agent Config:**
+```yaml
+vlc:
+  enabled: true                    # Enable VLC preview feature
+  executable: null                 # Auto-detected, or specify path
+  fullscreen: true                 # Open VLC in fullscreen mode
+```
+
+**Dashboard UI:**
+- VLC preview button appears in transcode approval modal
+- If VLC is installed on agent: Shows "Preview with VLC" button
+- If VLC is not installed: Shows disabled button + "Get VLC" download link
+
 ---
 
 ## 1. Agent Requirements
@@ -222,7 +256,16 @@ Tracks matching these patterns should be flagged as extras:
 | `/api/jobs/stats` | GET | [x] |
 | `/api/jobs/pending` | GET | [x] |
 
-### 6.3 Existing Endpoints
+### 6.3 VLC Preview Endpoints (NEW)
+
+| Endpoint | Method | Status |
+|----------|--------|--------|
+| `/api/vlc/preview` | POST | [x] |
+| `/api/vlc/commands/{agent_id}` | GET | [x] |
+| `/api/vlc/commands/{command_id}/complete` | POST | [x] |
+| `/api/vlc/commands/{command_id}/status` | GET | [x] |
+
+### 6.4 Existing Endpoints
 
 | Endpoint | Method | Status |
 |----------|--------|--------|
@@ -331,7 +374,7 @@ workers:
 - [x] Discs page with title selection
 - [x] Docker integration
 
-### Phase 2: Worker System [COMPLETE]
+### Phase 2: Worker System [MOSTLY COMPLETE]
 - [x] Worker model and database schema
 - [x] Worker registration endpoint
 - [x] Worker heartbeat endpoint
@@ -340,7 +383,7 @@ workers:
 - [x] Update agent to register as worker
 - [x] HandBrake integration for transcoding
 - [x] Local transcode mode (agent transcodes locally, uploads result)
-- [ ] Remote transcode mode (upload raw, remote worker transcodes)
+- [ ] Remote transcode mode (A10, W4, W6) - upload raw, remote worker downloads/transcodes/uploads
 
 ### Phase 2.5: Transcode Approval Workflow [COMPLETE]
 - [x] Jobs require user approval before transcoding
@@ -372,19 +415,28 @@ workers:
 - [x] Set up Alembic migrations (Phase 4.1)
 - [ ] End-to-end testing (REQUIRED BEFORE PRODUCTION)
 
-### Phase 5: Remote Transcode Mode & File Organization [IN PROGRESS]
-- [ ] Remote worker raw file upload
-- [ ] Remote worker file download from server
+### Phase 5: File Organization [COMPLETE ✅]
 - [x] Complete file organization to network shares (S18)
 - [x] Plex library scan integration (S19)
 - [x] Auto-cleanup of staging files (A17)
 - [x] Auto-eject disc on completion (A18)
 
-### Phase 5: Windows Service
-- [ ] Agent as Windows Service
-- [ ] Auto-start on boot
-- [ ] System tray UI
-- [ ] Service management commands
+### Phase 6: Remote Transcode Mode [NOT STARTED]
+- [ ] Remote worker raw file upload (A10)
+- [ ] Remote worker file download from server (W4)
+- [ ] Remote worker result upload (W6)
+
+### Phase 7: Windows System Tray Launcher [COMPLETE ✅]
+- [x] System tray application with status indicator (green/red/yellow/blue)
+- [x] Start/Stop/Restart agent controls
+- [x] Auto-start agent when launcher runs
+- [x] Single-instance protection (prevents multiple launchers/agents)
+- [x] Health monitoring with crash detection and notification
+- [x] Git-based update checking and auto-pull
+- [x] Dashboard quick access button
+- [x] Log file viewer
+- [x] PyInstaller build configuration for standalone .exe
+- [ ] Auto-start launcher on Windows boot (requires manual setup: add to Startup folder or Task Scheduler)
 
 ---
 
@@ -413,31 +465,30 @@ workers:
 - Transcode approval workflow (user selects worker + preset)
 - Upload with retry logic and error visibility
 
-### What's Missing for PRD Compliance:
+### What's Complete:
 
-**🚨 CRITICAL (Fix First):**
+**Core Features:**
 1. ~~**Movie Detection & Matching**~~ - **COMPLETE** (OMDb integration working)
-2. **Video Preview/Verification** - **IN PROGRESS** (Two-stage system: Stage 2 post-rip thumbnails priority)
-
-**Previously Completed:**
-3. ~~**Worker System**~~ - **IMPLEMENTED** (agents register as workers)
-4. ~~**SQLite Database**~~ - **IMPLEMENTED** (Phase 4 complete - persistent storage)
-5. ~~**Rip Preview/Approval**~~ - **IMPLEMENTED** (Phase 3 complete)
-6. ~~**TV Show Intelligence**~~ - **IMPLEMENTED** (TheTVDB integration, episode matching, multi-disc tracking)
-7. ~~**HandBrake Integration**~~ - **IMPLEMENTED** (local transcode working)
-8. ~~**Worker Assignment**~~ - **IMPLEMENTED** (priority-based via approval)
-9. ~~**Disc Name Cleanup**~~ - **IMPLEMENTED** (auto-detect TV vs movie with TheTVDB)
+2. ~~**Video Preview/Verification**~~ - **COMPLETE** (Stage 2 post-rip thumbnails with 2x2 grid)
+3. ~~**Worker System**~~ - **COMPLETE** (agents register as workers)
+4. ~~**SQLite Database**~~ - **COMPLETE** (Phase 4 - persistent storage with Alembic migrations)
+5. ~~**Rip Preview/Approval**~~ - **COMPLETE** (Phase 3)
+6. ~~**TV Show Intelligence**~~ - **COMPLETE** (TheTVDB integration, episode matching, multi-disc tracking)
+7. ~~**HandBrake Integration**~~ - **COMPLETE** (local transcode working)
+8. ~~**Worker Assignment**~~ - **COMPLETE** (priority-based via approval, with failover S13)
+9. ~~**Disc Name Cleanup**~~ - **COMPLETE** (auto-detect TV vs movie with TheTVDB)
+10. ~~**Plex Integration**~~ - **COMPLETE** (S19: Trigger library scan after organize)
+11. ~~**File Organization**~~ - **COMPLETE** (S18: Auto-organize to network shares with Plex trigger)
+12. ~~**Staging Cleanup**~~ - **COMPLETE** (A17: Delete temp files after upload)
+13. ~~**Auto-eject**~~ - **COMPLETE** (A18: Eject disc on completion)
+14. ~~**Discord Notifications**~~ - **COMPLETE** (S20: Webhook notifications)
+15. ~~**Windows System Tray Launcher**~~ - **COMPLETE** (Phase 7)
+16. ~~**Media Type Override**~~ - **COMPLETE** (P6: Switch movie ↔ TV with TheTVDB re-lookup)
+17. ~~**VLC Preview**~~ - **COMPLETE** (VLC1: Full video preview on agent via command relay)
 
 **Still Needed:**
-10. **Remote Transcode Mode** - Workers downloading/uploading raw files
-11. **Worker Failover** - Automatic reassignment on worker failure
-
-**Completed in Phase 5:**
-12. ~~**Plex Integration**~~ - **IMPLEMENTED** (S19: Trigger library scan after organize)
-13. ~~**File Organization**~~ - **IMPLEMENTED** (S18: Auto-organize to network shares with Plex trigger)
-14. ~~**Staging Cleanup**~~ - **IMPLEMENTED** (A17: Delete temp files after upload)
-15. ~~**Auto-eject**~~ - **IMPLEMENTED** (A18: Eject disc on completion)
-16. ~~**Discord Notifications**~~ - **IMPLEMENTED** (S20: Webhook notifications for job complete/fail/organized)
+18. **Remote Transcode Mode** - Workers downloading/uploading raw files (A10, W4, W6)
+19. **Minor API Endpoints** - Worker priority update and delete endpoints
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:
@@ -447,4 +498,4 @@ PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate con
 
 ---
 
-*Last Updated: January 24, 2026 - Phase 5 file organization, staging cleanup, auto-eject, Plex integration, and Discord notifications complete*
+*Last Updated: January 25, 2026 - VLC preview feature (VLC1) for full video preview before transcode approval*

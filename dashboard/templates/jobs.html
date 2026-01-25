@@ -638,12 +638,38 @@
         const gpuWorkers = availableWorkers.filter(w => w.capabilities?.nvenc || w.capabilities?.qsv);
         const cpuWorkers = availableWorkers.filter(w => !w.capabilities?.nvenc && !w.capabilities?.qsv);
 
+        // Check if any worker has VLC installed
+        const vlcWorker = availableWorkers.find(w => w.capabilities?.vlc_installed && w.agent_id);
+        const hasVlc = !!vlcWorker;
+
+        // Build VLC preview button
+        let vlcButtonHtml = '';
+        if (hasVlc) {
+            vlcButtonHtml = `
+                <button class="btn btn-outline-info btn-sm" onclick="launchVlcPreview('${job.input_file}', '${vlcWorker.agent_id}')" id="vlc-preview-btn">
+                    <i class="bi bi-play-circle me-1"></i>Preview with VLC
+                </button>
+            `;
+        } else {
+            vlcButtonHtml = `
+                <button class="btn btn-outline-secondary btn-sm" disabled title="VLC is not installed on the agent">
+                    <i class="bi bi-play-circle me-1"></i>Preview with VLC
+                </button>
+                <a href="https://www.videolan.org/vlc/" target="_blank" class="btn btn-outline-secondary btn-sm ms-1" title="Download VLC">
+                    <i class="bi bi-download me-1"></i>Get VLC
+                </a>
+            `;
+        }
+
         // Build thumbnail preview section (Stage 2)
         let thumbnailHtml = '';
         if (job.thumbnails && job.thumbnails.length > 0) {
             thumbnailHtml = `
                 <div class="thumbnail-preview-section">
-                    <h6 class="mb-3"><i class="bi bi-images me-2"></i>Video Preview</h6>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0"><i class="bi bi-images me-2"></i>Video Preview</h6>
+                        <div>${vlcButtonHtml}</div>
+                    </div>
                     <div class="thumbnail-grid">
                         ${job.thumbnails.map((url, i) => `
                             <div class="thumbnail-item">
@@ -660,7 +686,10 @@
         } else {
             thumbnailHtml = `
                 <div class="thumbnail-preview-section">
-                    <h6 class="mb-3"><i class="bi bi-images me-2"></i>Video Preview</h6>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0"><i class="bi bi-images me-2"></i>Video Preview</h6>
+                        <div>${vlcButtonHtml}</div>
+                    </div>
                     <div class="no-thumbnails">
                         <i class="bi bi-camera-video-off me-2"></i>No preview thumbnails available
                     </div>
@@ -1013,6 +1042,74 @@
         }
         modal.querySelector('img').src = url;
         modal.classList.add('active');
+    }
+
+    // Launch VLC preview on agent
+    async function launchVlcPreview(filePath, agentId) {
+        const btn = document.getElementById('vlc-preview-btn');
+        if (!btn) return;
+
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Launching...';
+
+        try {
+            const response = await fetch('/api/vlc/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    agent_id: agentId,
+                    file_path: filePath,
+                    fullscreen: true
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.command_id) {
+                // Show success state briefly
+                btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>VLC Launched';
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-success');
+
+                // Poll for completion (optional, just for feedback)
+                setTimeout(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/vlc/commands/${data.command_id}/status`);
+                        const status = await statusRes.json();
+                        if (status.status === 'failed') {
+                            btn.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>Launch Failed';
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-danger');
+                        }
+                    } catch (e) {
+                        console.error('Failed to check VLC status:', e);
+                    }
+                }, 3000);
+
+                // Reset button after delay
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    btn.classList.remove('btn-success', 'btn-danger');
+                    btn.classList.add('btn-outline-info');
+                }, 5000);
+            } else {
+                throw new Error(data.detail || data.error || 'Failed to launch VLC');
+            }
+        } catch (error) {
+            console.error('VLC preview failed:', error);
+            btn.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>Error';
+            btn.classList.remove('btn-outline-info');
+            btn.classList.add('btn-danger');
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-info');
+            }, 3000);
+        }
     }
 
     // Initial load

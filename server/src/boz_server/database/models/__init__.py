@@ -4,6 +4,7 @@ from .agent import AgentORM
 from .disc import DiscORM, TitleORM
 from .job import JobORM
 from .tv_show import TVEpisodeORM, TVSeasonORM
+from .vlc_command import VLCCommandORM
 from .worker import WorkerORM
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "TitleORM",
     "TVSeasonORM",
     "TVEpisodeORM",
+    "VLCCommandORM",
 ]
