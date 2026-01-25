@@ -353,23 +353,41 @@ class JobRunner:
         # Submit to worker and wait for completion
         await self.worker.submit_job(transcode_job)
 
-        # Poll for completion
+        # Poll for completion with cancellation check
+        cancellation_check_interval = 0
         while True:
             status = self.worker.get_job_status(job_id)
             if not status:
                 break
 
+            # W9: Check for cancellation every 10 seconds (every 5th iteration)
+            cancellation_check_interval += 1
+            if cancellation_check_interval >= 5:
+                cancellation_check_interval = 0
+                if await self.server_client.is_job_cancelled(job_id):
+                    logger.info("job_cancelled_by_server", job_id=job_id)
+                    await self.worker.cancel_job(job_id)
+                    # Wait briefly for cancellation to complete
+                    await asyncio.sleep(1)
+                    break
+
             await self.server_client.update_job_status(
                 job_id, status.status, progress=status.progress
             )
 
-            if status.status in ("completed", "failed"):
+            if status.status in ("completed", "failed", "cancelled"):
                 break
 
             await asyncio.sleep(2)
 
         # Get final status
         final_status = self.worker.get_job_status(job_id)
+
+        if final_status and final_status.status == "cancelled":
+            logger.info("transcode_cancelled", job_id=job_id)
+            # Status already updated on server, just log and return
+            return
+
         if final_status and final_status.status == "completed":
             logger.info("transcode_completed", job_id=job_id, output_file=str(output_file))
 

@@ -667,3 +667,39 @@ class ServerClient:
             logger.warning("check_disc_rips_complete_failed", disc_id=disc_id, error=str(e))
             # Default to False to avoid premature eject
             return False
+
+    async def get_job(self, job_id: str) -> Optional[dict]:
+        """Get job details from the server.
+
+        W9: Used to check if a job has been cancelled.
+
+        Args:
+            job_id: Job identifier
+
+        Returns:
+            Job dict or None if not found
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/api/jobs/{job_id}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.warning("get_job_failed", job_id=job_id, error=str(e))
+            return None
+
+    async def is_job_cancelled(self, job_id: str) -> bool:
+        """Check if a job has been cancelled.
+
+        W9: Used for graceful job cancellation.
+
+        Args:
+            job_id: Job identifier
+
+        Returns:
+            True if job status is 'cancelled'
+        """
+        job = await self.get_job(job_id)
+        if job:
+            return job.get("status") == "cancelled"
+        return False

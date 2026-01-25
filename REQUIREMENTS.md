@@ -140,7 +140,7 @@ Stage 2 is critical because:
 | W6 | Upload final file to server (if remote worker) | P0 | [~] |
 | W7 | Report progress to server | P1 | [x] |
 | W8 | Send heartbeat every 30 seconds | P0 | [x] |
-| W9 | Handle job cancellation gracefully | P1 | [ ] |
+| W9 | Handle job cancellation gracefully | P1 | [x] |
 | W10 | Support concurrent jobs (configurable max) | P1 | [x] |
 
 ---

@@ -23,6 +23,9 @@ class TranscodeJob:
     gpu_type: str = "none"
     progress: float = 0.0
     status: str = "pending"
+    error: Optional[str] = None
+    process: Optional[asyncio.subprocess.Process] = None
+    cancelled: bool = False
 
 
 class WorkerService:
@@ -97,6 +100,50 @@ class WorkerService:
         """Get the status of a job."""
         return self._current_jobs.get(job_id)
 
+    async def cancel_job(self, job_id: str) -> bool:
+        """Cancel a running job.
+
+        Args:
+            job_id: Job ID to cancel
+
+        Returns:
+            True if job was found and cancellation initiated
+        """
+        job = self._current_jobs.get(job_id)
+        if not job:
+            logger.warning("cancel_job_not_found", job_id=job_id)
+            return False
+
+        job.cancelled = True
+
+        # Terminate the process if running
+        if job.process and job.process.returncode is None:
+            logger.info("terminating_handbrake_process", job_id=job_id, pid=job.process.pid)
+            try:
+                job.process.terminate()
+                # Give it a moment to terminate gracefully
+                try:
+                    await asyncio.wait_for(job.process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    # Force kill if it doesn't terminate
+                    logger.warning("force_killing_handbrake", job_id=job_id)
+                    job.process.kill()
+                    await job.process.wait()
+            except Exception as e:
+                logger.error("failed_to_terminate_process", job_id=job_id, error=str(e))
+
+        # Clean up partial output file
+        if job.output_file.exists():
+            try:
+                job.output_file.unlink()
+                logger.info("partial_output_deleted", job_id=job_id, file=str(job.output_file))
+            except Exception as e:
+                logger.warning("failed_to_delete_partial_output", job_id=job_id, error=str(e))
+
+        job.status = "cancelled"
+        logger.info("job_cancelled", job_id=job_id)
+        return True
+
     async def _worker_loop(self, worker_id: int) -> None:
         """Main worker loop."""
         logger.info("worker_task_started", worker_id=worker_id)
@@ -130,6 +177,12 @@ class WorkerService:
         job.status = "running"
 
         try:
+            # Check if already cancelled before starting
+            if job.cancelled:
+                job.status = "cancelled"
+                logger.info("job_cancelled_before_start", job_id=job.job_id)
+                return
+
             # Build HandBrake command
             cmd = self._build_handbrake_command(job)
 
@@ -139,8 +192,16 @@ class WorkerService:
                 stderr=asyncio.subprocess.STDOUT,
             )
 
+            # Store process reference for cancellation
+            job.process = process
+
             # Monitor progress
             while True:
+                # Check for cancellation
+                if job.cancelled:
+                    logger.info("job_cancelled_during_transcode", job_id=job.job_id)
+                    break
+
                 line = await process.stdout.readline()
                 if not line:
                     break
@@ -152,12 +213,26 @@ class WorkerService:
 
             await process.wait()
 
-            if process.returncode == 0:
+            # Clear process reference
+            job.process = None
+
+            # Check final status
+            if job.cancelled:
+                job.status = "cancelled"
+                # Clean up partial output
+                if job.output_file.exists():
+                    try:
+                        job.output_file.unlink()
+                        logger.info("partial_output_deleted", job_id=job.job_id)
+                    except Exception as e:
+                        logger.warning("failed_to_delete_partial", error=str(e))
+            elif process.returncode == 0:
                 job.status = "completed"
                 job.progress = 100.0
                 logger.info("job_completed", job_id=job.job_id)
             else:
                 job.status = "failed"
+                job.error = f"HandBrake exited with code {process.returncode}"
                 logger.error(
                     "job_failed",
                     job_id=job.job_id,
@@ -166,6 +241,7 @@ class WorkerService:
 
         except Exception as e:
             job.status = "failed"
+            job.error = str(e)
             logger.error("job_error", job_id=job.job_id, error=str(e))
 
     def _build_handbrake_command(self, job: TranscodeJob) -> list[str]:
