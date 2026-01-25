@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 import structlog
 
@@ -23,7 +23,7 @@ class JobRunner:
         settings: Settings,
         server_client: ServerClient,
         makemkv: MakeMKVService,
-        on_disc_rips_complete: Optional[Callable[[str, str], asyncio.coroutine]] = None,
+        on_disc_rips_complete: Optional[Callable[[str, str], Coroutine[Any, Any, None]]] = None,
     ):
         """Initialize the job runner.
 

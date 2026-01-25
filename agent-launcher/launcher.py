@@ -171,10 +171,16 @@ class BozRipperLauncher:
             # Open log file for agent output
             self.log_file = open(LOG_FILE, "a", encoding="utf-8")
 
+            # Set up environment with PYTHONPATH pointing to agent/src
+            env = os.environ.copy()
+            agent_src = AGENT_DIR / "src"
+            env["PYTHONPATH"] = str(agent_src)
+
             # Start the agent process
             self.agent_process = subprocess.Popen(
-                [sys.executable, "-m", "boz_agent"],
+                [sys.executable, "-m", "boz_agent", "run"],
                 cwd=str(AGENT_DIR),
+                env=env,
                 stdout=self.log_file,
                 stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
