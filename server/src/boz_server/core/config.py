@@ -64,5 +64,13 @@ class Settings(BaseSettings):
     database_url: Optional[str] = None  # SQLite database URL (default: sqlite+aiosqlite:////data/database/boz_ripper.db)
     database_echo: bool = False  # Enable SQL query logging for debugging
 
+    # Plex integration settings
+    plex_enabled: bool = False  # Enable Plex library scan after file organization
+    plex_url: str = "http://localhost:32400"  # Plex server URL
+    plex_token: Optional[str] = None  # Plex authentication token
+    plex_movie_library_id: Optional[str] = None  # Plex library section ID for Movies
+    plex_tv_library_id: Optional[str] = None  # Plex library section ID for TV Shows
+    plex_scan_delay_seconds: int = 2  # Delay before triggering scan (allows file system to sync)
+
 
 settings = Settings()

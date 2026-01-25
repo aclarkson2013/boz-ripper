@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import structlog
 
@@ -23,10 +23,21 @@ class JobRunner:
         settings: Settings,
         server_client: ServerClient,
         makemkv: MakeMKVService,
+        on_disc_rips_complete: Optional[Callable[[str, str], asyncio.coroutine]] = None,
     ):
+        """Initialize the job runner.
+
+        Args:
+            settings: Agent settings
+            server_client: Client for server communication
+            makemkv: MakeMKV service for ripping
+            on_disc_rips_complete: A18 callback when all rips for a disc finish.
+                                   Called with (disc_id, drive) args.
+        """
         self.settings = settings
         self.server_client = server_client
         self.makemkv = makemkv
+        self.on_disc_rips_complete = on_disc_rips_complete
 
         # Thumbnail extractor for Stage 2 post-rip preview
         self.thumbnail_extractor = ThumbnailExtractor(settings.thumbnails)
@@ -259,10 +270,42 @@ class JobRunner:
             if transcode_job:
                 logger.info("transcode_job_queued_for_approval", job_id=transcode_job.get("job_id"))
 
+            # A18: Check if all rip jobs for this disc are complete
+            await self._check_and_notify_disc_complete(disc_id, drive)
+
         finally:
             # Always reset the rip-in-progress flag
             self._rip_in_progress = False
             logger.debug("rip_lock_released", job_id=job_id)
+
+    async def _check_and_notify_disc_complete(
+        self, disc_id: str, drive: str
+    ) -> None:
+        """A18: Check if all rips for a disc are complete and notify callback.
+
+        Args:
+            disc_id: Disc identifier
+            drive: Drive letter where disc is mounted
+        """
+        if not self.on_disc_rips_complete:
+            return
+
+        try:
+            all_complete = await self.server_client.check_disc_rips_complete(disc_id)
+            if all_complete:
+                logger.info(
+                    "all_disc_rips_complete",
+                    disc_id=disc_id,
+                    drive=drive,
+                )
+                # Call the callback (e.g., to eject the disc)
+                await self.on_disc_rips_complete(disc_id, drive)
+        except Exception as e:
+            logger.warning(
+                "disc_complete_check_failed",
+                disc_id=disc_id,
+                error=str(e),
+            )
 
     async def _execute_transcode_job(self, job: dict) -> None:
         """Execute a transcode job using HandBrake."""
@@ -337,6 +380,9 @@ class JobRunner:
                 await self.server_client.update_job_status(
                     job_id, "completed", progress=100, output_file=str(output_file)
                 )
+
+                # A17: Cleanup staging files after successful upload
+                await self._cleanup_staging_files(input_file, output_file)
             else:
                 # Mark as completed but with upload error note
                 await self.server_client.update_job_status(
@@ -371,3 +417,62 @@ class JobRunner:
 
         logger.error("upload_all_retries_failed", file=str(file_path), retries=retries)
         return False
+
+    async def _cleanup_staging_files(
+        self, input_file: Path, output_file: Path
+    ) -> None:
+        """A17: Delete staging files after successful upload.
+
+        Cleans up:
+        1. The ripped MKV file (input_file) from temp_dir
+        2. The transcoded file (output_file) from output_dir
+
+        Args:
+            input_file: Path to the ripped MKV file (temp staging)
+            output_file: Path to the transcoded file (output staging)
+        """
+        # Cleanup ripped MKV from temp directory
+        if self.settings.makemkv.cleanup_after_transcode:
+            if input_file.exists():
+                try:
+                    input_file.unlink()
+                    logger.info(
+                        "staging_file_deleted",
+                        file=str(input_file),
+                        type="ripped_mkv",
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "staging_file_delete_failed",
+                        file=str(input_file),
+                        error=str(e),
+                    )
+            else:
+                logger.debug(
+                    "staging_file_not_found",
+                    file=str(input_file),
+                    type="ripped_mkv",
+                )
+
+        # Cleanup transcoded file from output directory
+        if self.settings.worker.cleanup_after_upload:
+            if output_file.exists():
+                try:
+                    output_file.unlink()
+                    logger.info(
+                        "staging_file_deleted",
+                        file=str(output_file),
+                        type="transcoded_mkv",
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "staging_file_delete_failed",
+                        file=str(output_file),
+                        error=str(e),
+                    )
+            else:
+                logger.debug(
+                    "staging_file_not_found",
+                    file=str(output_file),
+                    type="transcoded_mkv",
+                )

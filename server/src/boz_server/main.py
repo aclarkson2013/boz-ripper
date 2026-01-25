@@ -16,6 +16,7 @@ from boz_server.database import init_db
 from boz_server.services.agent_manager_db import AgentManager
 from boz_server.services.job_queue_db import JobQueue
 from boz_server.services.nas_organizer import NASOrganizer
+from boz_server.services.plex_client import PlexClient
 from boz_server.services.preview_generator_db import PreviewGenerator
 from boz_server.services.thetvdb_client import TheTVDBClient
 from boz_server.services.omdb_client import OMDbClient
@@ -32,8 +33,17 @@ logger = logging.getLogger(__name__)
 # Service instances
 agent_manager = AgentManager()
 job_queue = JobQueue()
-nas_organizer = NASOrganizer()
 worker_manager = WorkerManager()
+
+# Initialize Plex client (S19: Library scan after file organization)
+plex_client = PlexClient() if settings.plex_enabled else None
+if plex_client:
+    logger.info("Plex integration enabled")
+else:
+    logger.info("Plex integration disabled")
+
+# Initialize NAS organizer with Plex client
+nas_organizer = NASOrganizer(plex_client=plex_client)
 
 # Initialize TheTVDB client if API key is configured
 thetvdb_client = None
@@ -82,10 +92,13 @@ async def lifespan(app: FastAPI):
         preview_generator,
         thetvdb_client,
         thumbnail_storage,
+        plex_client,
     )
     await agent_manager.start()
     await nas_organizer.start()
     await worker_manager.start()
+    if plex_client:
+        await plex_client.start()
 
     logger.info(f"Server ready on {settings.host}:{settings.port}")
 
@@ -96,6 +109,8 @@ async def lifespan(app: FastAPI):
     await agent_manager.stop()
     await nas_organizer.stop()
     await worker_manager.stop()
+    if plex_client:
+        await plex_client.stop()
     if thetvdb_client:
         await thetvdb_client.close()
     if omdb_client:

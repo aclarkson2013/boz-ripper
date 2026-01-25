@@ -38,6 +38,7 @@ class MakeMKVConfig(BaseModel):
     temp_dir: str = r"C:\BozRipper\temp"
     min_title_length: int = 120
     profile: Optional[str] = None
+    cleanup_after_transcode: bool = True  # Delete ripped MKV after transcode completes
 
 
 class ThumbnailConfig(BaseModel):
@@ -69,6 +70,14 @@ class WorkerConfig(BaseModel):
     av1: bool = False
 
     output_dir: str = r"C:\BozRipper\output"
+    cleanup_after_upload: bool = True  # Delete transcoded file after successful upload
+
+
+class DiscEjectConfig(BaseModel):
+    """Disc ejection settings."""
+
+    auto_eject_on_completion: bool = True  # Eject disc when all rips complete
+    eject_delay_seconds: int = 2  # Delay before ejecting (allows UI to update)
 
 
 class HandBrakeConfig(BaseModel):
@@ -99,6 +108,7 @@ class Settings(BaseSettings):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     disc_detection: DiscDetectionConfig = Field(default_factory=DiscDetectionConfig)
+    disc_eject: DiscEjectConfig = Field(default_factory=DiscEjectConfig)
     makemkv: MakeMKVConfig = Field(default_factory=MakeMKVConfig)
     thumbnails: ThumbnailConfig = Field(default_factory=ThumbnailConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)

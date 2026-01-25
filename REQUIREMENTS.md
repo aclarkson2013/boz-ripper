@@ -95,8 +95,8 @@ Stage 2 is critical because:
 | A14 | Call MakeMKV to rip approved tracks | P0 | [x] |
 | A15 | Monitor progress and report to user | P1 | [x] |
 | A16 | Upload files via chunked transfer | P0 | [x] |
-| A17 | Delete staging files after upload | P0 | [ ] |
-| A18 | Auto-eject disc on completion | P1 | [ ] |
+| A17 | Delete staging files after upload | P0 | [x] |
+| A18 | Auto-eject disc on completion | P1 | [x] |
 
 ---
 
@@ -121,8 +121,8 @@ Stage 2 is critical because:
 | S15 | Queue jobs in SQLite database | P0 | [ ] |
 | S16 | Process jobs sequentially or parallel (configurable) | P0 | [x] |
 | S17 | Receive transcoded files from workers | P0 | [x] |
-| S18 | Organize files to network shares | P0 | [~] |
-| S19 | Trigger Plex library scan | P1 | [ ] |
+| S18 | Organize files to network shares | P0 | [x] |
+| S19 | Trigger Plex library scan | P1 | [x] |
 | S20 | Send Discord notifications | P1 | [ ] |
 | S21 | Web UI dashboard (jobs, workers, previews) | P0 | [x] |
 
@@ -372,13 +372,13 @@ workers:
 - [ ] Set up Alembic migrations (Phase 4.1)
 - [ ] End-to-end testing (REQUIRED BEFORE PRODUCTION)
 
-### Phase 5: Remote Transcode Mode & File Organization [NEXT]
+### Phase 5: Remote Transcode Mode & File Organization [IN PROGRESS]
 - [ ] Remote worker raw file upload
 - [ ] Remote worker file download from server
-- [ ] Complete file organization to network shares
-- [ ] Plex library scan integration
-- [ ] Auto-cleanup of staging files
-- [ ] Auto-eject disc on completion
+- [x] Complete file organization to network shares (S18)
+- [x] Plex library scan integration (S19)
+- [x] Auto-cleanup of staging files (A17)
+- [x] Auto-eject disc on completion (A18)
 
 ### Phase 5: Windows Service
 - [ ] Agent as Windows Service
@@ -431,10 +431,12 @@ workers:
 **Still Needed:**
 10. **Remote Transcode Mode** - Workers downloading/uploading raw files
 11. **Worker Failover** - Automatic reassignment on worker failure
-12. **Plex Integration** - Trigger library scan after organize
-13. **File Organization** - Auto-organize to network shares (partial)
-14. **Staging Cleanup** - Delete temp files after upload
-15. **Auto-eject** - Eject disc on completion
+
+**Completed in Phase 5:**
+12. ~~**Plex Integration**~~ - **IMPLEMENTED** (S19: Trigger library scan after organize)
+13. ~~**File Organization**~~ - **IMPLEMENTED** (S18: Auto-organize to network shares with Plex trigger)
+14. ~~**Staging Cleanup**~~ - **IMPLEMENTED** (A17: Delete temp files after upload)
+15. ~~**Auto-eject**~~ - **IMPLEMENTED** (A18: Eject disc on completion)
 
 ### Key Architectural Decision:
 PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate concepts:
@@ -444,4 +446,4 @@ PRD specifies **Agents** (ripping) and **Workers** (transcoding) as separate con
 
 ---
 
-*Last Updated: January 24, 2026*
+*Last Updated: January 24, 2026 - Phase 5 file organization, staging cleanup, auto-eject, and Plex integration complete*

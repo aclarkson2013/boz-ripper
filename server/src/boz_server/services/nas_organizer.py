@@ -1,12 +1,16 @@
 """NAS file organization service."""
 
+import asyncio
 import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from boz_server.core.config import settings
+
+if TYPE_CHECKING:
+    from boz_server.services.plex_client import PlexClient
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +18,10 @@ logger = logging.getLogger(__name__)
 class NASOrganizer:
     """Organizes completed files to NAS storage."""
 
-    def __init__(self):
+    def __init__(self, plex_client: Optional["PlexClient"] = None):
         self._nas_mounted = False
         self._mount_path: Optional[Path] = None
+        self._plex_client = plex_client
 
     async def start(self) -> None:
         """Initialize NAS connection."""
@@ -37,7 +42,7 @@ class NASOrganizer:
         """Cleanup NAS connection."""
         pass
 
-    def organize_movie(
+    async def organize_movie(
         self,
         source_file: Path,
         movie_name: str,
@@ -76,12 +81,16 @@ class NASOrganizer:
         try:
             logger.info(f"Moving {source_file} to {dest_file}")
             shutil.move(str(source_file), str(dest_file))
+
+            # S19: Trigger Plex library scan after successful organization
+            await self._trigger_plex_scan("movie", str(dest_dir))
+
             return dest_file
         except Exception as e:
             logger.error(f"Failed to move file to NAS: {e}")
             return None
 
-    def organize_tv_episode(
+    async def organize_tv_episode(
         self,
         source_file: Path,
         show_name: str,
@@ -126,10 +135,44 @@ class NASOrganizer:
         try:
             logger.info(f"Moving {source_file} to {dest_file}")
             shutil.move(str(source_file), str(dest_file))
+
+            # S19: Trigger Plex library scan after successful organization
+            await self._trigger_plex_scan("tv", str(show_dir))
+
             return dest_file
         except Exception as e:
             logger.error(f"Failed to move file to NAS: {e}")
             return None
+
+    async def _trigger_plex_scan(
+        self, media_type: str, path: Optional[str] = None
+    ) -> None:
+        """S19: Trigger Plex library scan after file organization.
+
+        Args:
+            media_type: Type of media ("movie" or "tv")
+            path: Path to scan (for more efficient scanning)
+        """
+        if not self._plex_client:
+            return
+
+        try:
+            # Delay to allow filesystem to sync
+            if settings.plex_scan_delay_seconds > 0:
+                await asyncio.sleep(settings.plex_scan_delay_seconds)
+
+            if media_type == "movie":
+                success = await self._plex_client.scan_movie_library(path)
+            else:
+                success = await self._plex_client.scan_tv_library(path)
+
+            if success:
+                logger.info(f"Plex {media_type} library scan triggered")
+            else:
+                logger.debug(f"Plex {media_type} scan not triggered (not configured)")
+
+        except Exception as e:
+            logger.warning(f"Failed to trigger Plex scan: {e}")
 
     def _clean_filename(self, name: str) -> str:
         """Clean a string for use as a filename."""
@@ -146,10 +189,15 @@ class NASOrganizer:
 
     def get_status(self) -> dict:
         """Get NAS organizer status."""
+        plex_status = None
+        if self._plex_client:
+            plex_status = self._plex_client.get_status()
+
         return {
             "enabled": settings.nas_enabled,
             "mounted": self._nas_mounted,
             "mount_path": str(self._mount_path) if self._mount_path else None,
             "movie_path": settings.nas_movie_path,
             "tv_path": settings.nas_tv_path,
+            "plex": plex_status,
         }

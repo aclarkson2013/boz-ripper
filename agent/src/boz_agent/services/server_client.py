@@ -645,3 +645,25 @@ class ServerClient:
                 pass
             self._worker_heartbeat_task = None
             logger.info("worker_stopped")
+
+    async def check_disc_rips_complete(self, disc_id: str) -> bool:
+        """Check if all rip jobs for a disc are complete.
+
+        A18: Used to determine when to auto-eject disc.
+
+        Args:
+            disc_id: Disc identifier
+
+        Returns:
+            True if all rip jobs for this disc are complete
+        """
+        try:
+            client = await self._get_client()
+            response = await client.get(f"/api/discs/{disc_id}/rip-status")
+            response.raise_for_status()
+            data = response.json()
+            return data.get("all_rips_complete", False)
+        except Exception as e:
+            logger.warning("check_disc_rips_complete_failed", disc_id=disc_id, error=str(e))
+            # Default to False to avoid premature eject
+            return False

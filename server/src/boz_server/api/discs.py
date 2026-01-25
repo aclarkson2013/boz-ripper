@@ -321,6 +321,49 @@ async def get_tv_season(
     return season
 
 
+@router.get("/{disc_id}/rip-status")
+async def get_disc_rip_status(
+    disc_id: str,
+    job_queue: JobQueueDep,
+) -> dict:
+    """A18: Get rip completion status for a disc.
+
+    Used by agents to determine when to auto-eject disc.
+
+    Returns:
+        dict with all_rips_complete: True if all rip jobs are completed
+    """
+    disc = await job_queue.get_disc(disc_id)
+    if not disc:
+        raise HTTPException(status_code=404, detail="Disc not found")
+
+    # Get all rip jobs for this disc
+    all_jobs = await job_queue.get_all_jobs()
+    disc_rip_jobs = [
+        j for j in all_jobs
+        if j.job_type == "rip" and j.disc_id == disc_id
+    ]
+
+    # Check if all rip jobs are complete
+    if not disc_rip_jobs:
+        # No rip jobs yet means not complete
+        return {"all_rips_complete": False, "total_jobs": 0, "completed_jobs": 0}
+
+    completed = sum(1 for j in disc_rip_jobs if j.status == "completed")
+    failed = sum(1 for j in disc_rip_jobs if j.status == "failed")
+    total = len(disc_rip_jobs)
+
+    # All complete if all are either completed or failed
+    all_done = (completed + failed) == total
+
+    return {
+        "all_rips_complete": all_done,
+        "total_jobs": total,
+        "completed_jobs": completed,
+        "failed_jobs": failed,
+    }
+
+
 @router.post("/{disc_id}/rip")
 async def start_rip(
     disc_id: str,

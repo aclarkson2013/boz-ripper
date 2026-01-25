@@ -5,6 +5,7 @@ import ctypes
 import os
 import string
 from concurrent.futures import ThreadPoolExecutor
+from ctypes import wintypes
 from typing import Callable, Optional
 
 import structlog
@@ -15,6 +16,13 @@ logger = structlog.get_logger()
 
 # Thread pool for blocking I/O operations
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="disc_detector")
+
+# Windows constants for disc ejection
+GENERIC_READ = 0x80000000
+FILE_SHARE_READ = 0x00000001
+FILE_SHARE_WRITE = 0x00000002
+OPEN_EXISTING = 3
+IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808
 
 
 class DiscDetector:
@@ -219,3 +227,90 @@ class DiscDetector:
     def get_current_discs(self) -> dict[str, dict]:
         """Get currently detected discs."""
         return self._known_discs.copy()
+
+    async def eject_disc(self, drive: str) -> bool:
+        """A18: Eject a disc from the specified drive.
+
+        Args:
+            drive: Drive letter (e.g., "I:" or "I")
+
+        Returns:
+            True if eject succeeded, False otherwise
+        """
+        # Normalize drive letter
+        drive_letter = drive.rstrip(":\\").upper()
+
+        logger.info("ejecting_disc", drive=drive_letter)
+
+        loop = asyncio.get_event_loop()
+        try:
+            success = await asyncio.wait_for(
+                loop.run_in_executor(_executor, self._eject_disc_sync, drive_letter),
+                timeout=10.0,
+            )
+            if success:
+                logger.info("disc_ejected_successfully", drive=drive_letter)
+                # Remove from known discs immediately
+                if f"{drive_letter}:" in self._known_discs:
+                    del self._known_discs[f"{drive_letter}:"]
+            else:
+                logger.warning("disc_eject_failed", drive=drive_letter)
+            return success
+        except asyncio.TimeoutError:
+            logger.error("disc_eject_timeout", drive=drive_letter)
+            return False
+        except Exception as e:
+            logger.error("disc_eject_error", drive=drive_letter, error=str(e))
+            return False
+
+    def _eject_disc_sync(self, drive_letter: str) -> bool:
+        """Eject disc using Windows DeviceIoControl (runs in thread).
+
+        Args:
+            drive_letter: Single letter drive (e.g., "I")
+
+        Returns:
+            True if eject succeeded
+        """
+        # Build device path for the drive
+        device_path = f"\\\\.\\{drive_letter}:"
+
+        try:
+            # Open the drive device
+            handle = ctypes.windll.kernel32.CreateFileW(
+                device_path,
+                GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                0,
+                None,
+            )
+
+            if handle == -1 or handle == wintypes.HANDLE(-1).value:
+                logger.warning("eject_open_drive_failed", drive=drive_letter)
+                return False
+
+            try:
+                # Send eject command
+                bytes_returned = wintypes.DWORD()
+                result = ctypes.windll.kernel32.DeviceIoControl(
+                    handle,
+                    IOCTL_STORAGE_EJECT_MEDIA,
+                    None,
+                    0,
+                    None,
+                    0,
+                    ctypes.byref(bytes_returned),
+                    None,
+                )
+
+                return bool(result)
+
+            finally:
+                # Close handle
+                ctypes.windll.kernel32.CloseHandle(handle)
+
+        except Exception as e:
+            logger.error("eject_exception", drive=drive_letter, error=str(e))
+            return False

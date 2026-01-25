@@ -45,6 +45,7 @@ class Agent:
             settings=settings,
             server_client=self.server_client,
             makemkv=self.makemkv,
+            on_disc_rips_complete=self.handle_disc_rips_complete,
         )
 
     async def start(self) -> None:
@@ -124,6 +125,47 @@ class Agent:
         """Handle a disc ejection event."""
         logger.info("disc_ejected", drive=drive)
         await self.server_client.report_disc_ejected(drive)
+
+    async def handle_disc_rips_complete(self, disc_id: str, drive: str) -> None:
+        """A18: Handle completion of all rip jobs for a disc.
+
+        Auto-ejects the disc if enabled in config.
+
+        Args:
+            disc_id: Disc identifier
+            drive: Drive letter where disc is mounted
+        """
+        if not self.settings.disc_eject.auto_eject_on_completion:
+            logger.info(
+                "disc_rips_complete_eject_disabled",
+                disc_id=disc_id,
+                drive=drive,
+            )
+            return
+
+        logger.info(
+            "disc_rips_complete_ejecting",
+            disc_id=disc_id,
+            drive=drive,
+            delay=self.settings.disc_eject.eject_delay_seconds,
+        )
+
+        # Delay before ejecting to allow UI to update
+        if self.settings.disc_eject.eject_delay_seconds > 0:
+            await asyncio.sleep(self.settings.disc_eject.eject_delay_seconds)
+
+        # Eject the disc
+        success = await self.disc_detector.eject_disc(drive)
+        if success:
+            logger.info("disc_auto_ejected", disc_id=disc_id, drive=drive)
+            # Report ejection to server
+            await self.server_client.report_disc_ejected(drive)
+        else:
+            logger.warning(
+                "disc_auto_eject_failed",
+                disc_id=disc_id,
+                drive=drive,
+            )
 
 
 def load_settings(config_path: Optional[Path]) -> Settings:

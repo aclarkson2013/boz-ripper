@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from boz_server.api.deps import ApiKeyDep, NASOrganizerDep
+from boz_server.api.deps import ApiKeyDep, NASOrganizerDep, PlexClientDep
 from boz_server.core.config import settings
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -89,7 +89,7 @@ async def upload_file(
             logger.info(f"Parsed metadata: {metadata}")
 
             if metadata["media_type"] == "tv":
-                final_path = nas_organizer.organize_tv_episode(
+                final_path = await nas_organizer.organize_tv_episode(
                     file_path,
                     metadata["show_name"],
                     metadata["season"],
@@ -98,7 +98,7 @@ async def upload_file(
                 )
                 organized = final_path is not None
             elif metadata["media_type"] == "movie":
-                final_path = nas_organizer.organize_movie(
+                final_path = await nas_organizer.organize_movie(
                     file_path,
                     metadata["movie_name"],
                     metadata.get("year"),
@@ -162,14 +162,14 @@ async def organize_file(
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
     if media_type == "movie":
-        final_path = nas_organizer.organize_movie(source_file, name, year)
+        final_path = await nas_organizer.organize_movie(source_file, name, year)
     elif media_type == "tv":
         if season is None or episode is None:
             raise HTTPException(
                 status_code=400,
                 detail="Season and episode required for TV shows"
             )
-        final_path = nas_organizer.organize_tv_episode(
+        final_path = await nas_organizer.organize_tv_episode(
             source_file, name, season, episode
         )
     else:
@@ -228,3 +228,70 @@ async def delete_file(
     file_path.unlink()
 
     return {"status": "ok", "deleted": filename}
+
+
+@router.get("/plex/status")
+async def plex_status(
+    nas_organizer: NASOrganizerDep,
+    plex_client: PlexClientDep,
+) -> dict:
+    """Get Plex integration status.
+
+    S19: Used to verify Plex connection and get library configuration.
+    """
+    nas_status = nas_organizer.get_status()
+    plex_status = nas_status.get("plex", {})
+
+    return {
+        "enabled": plex_status.get("enabled", False) if plex_status else False,
+        "available": plex_status.get("available", False) if plex_status else False,
+        "url": plex_status.get("url") if plex_status else None,
+        "movie_library_id": plex_status.get("movie_library_id") if plex_status else None,
+        "tv_library_id": plex_status.get("tv_library_id") if plex_status else None,
+    }
+
+
+@router.get("/plex/libraries")
+async def plex_libraries(
+    plex_client: PlexClientDep,
+) -> dict:
+    """List Plex libraries.
+
+    S19: Useful for finding library section IDs during setup.
+    """
+    if not plex_client:
+        return {"libraries": [], "message": "Plex not configured"}
+
+    libraries = await plex_client.get_libraries()
+    return {"libraries": libraries}
+
+
+@router.post("/plex/scan/{media_type}")
+async def trigger_plex_scan(
+    media_type: str,
+    plex_client: PlexClientDep,
+    path: str | None = None,
+    _: ApiKeyDep = None,
+) -> dict:
+    """Manually trigger a Plex library scan.
+
+    Args:
+        media_type: Type of media ("movie" or "tv")
+        path: Optional specific path to scan
+
+    S19: Manual scan trigger for testing or recovery.
+    """
+    if not plex_client:
+        raise HTTPException(status_code=503, detail="Plex not configured")
+
+    if media_type == "movie":
+        success = await plex_client.scan_movie_library(path)
+    elif media_type == "tv":
+        success = await plex_client.scan_tv_library(path)
+    else:
+        raise HTTPException(status_code=400, detail="media_type must be 'movie' or 'tv'")
+
+    if success:
+        return {"status": "ok", "message": f"Plex {media_type} library scan triggered"}
+    else:
+        return {"status": "error", "message": "Scan not triggered - check Plex configuration"}
