@@ -248,7 +248,11 @@ class JobRepository(BaseRepository[JobORM]):
         return self.to_pydantic(job_orm)
 
     async def approve_job(
-        self, job_id: str, agent_id: str, preset: str
+        self,
+        job_id: str,
+        agent_id: str,
+        preset: str,
+        output_name: Optional[str] = None,
     ) -> Optional[Job]:
         """
         Approve a pending job and assign to agent.
@@ -257,6 +261,7 @@ class JobRepository(BaseRepository[JobORM]):
             job_id: Job ID
             agent_id: Agent ID to assign to
             preset: Transcoding preset
+            output_name: Optional new output name (TA9/TA10 file renaming)
 
         Returns:
             Updated job or None if not found/invalid
@@ -272,6 +277,10 @@ class JobRepository(BaseRepository[JobORM]):
         job_orm.requires_approval = False
         job_orm.status = JobStatus.ASSIGNED.value
         job_orm.assigned_at = datetime.utcnow()
+
+        # TA9/TA10: Update output name if user edited it
+        if output_name:
+            job_orm.output_name = output_name
 
         await self.session.flush()
         await self.session.refresh(job_orm)

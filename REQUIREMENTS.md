@@ -14,7 +14,7 @@ Extracted from PRD v2.1 (January 18, 2026)
 | ID | Issue | Description | Status |
 |----|-------|-------------|--------|
 | C1 | Movie Detection & Title Matching | Movies have poor detection/naming. Disc labels are often vague ("MOVIE", studio codes). Need OMDb/TMDb integration to match disc names to actual movie titles and generate proper filenames like "The Dark Knight (2008).mkv". Improve TV vs Movie heuristics using track count, duration patterns, and disc structure. | [x] |
-| C2 | Video Preview/Verification | Two-stage preview system: Stage 2 (post-rip FFmpeg thumbnails from MKV files) is critical for verifying episode-to-title mapping before transcoding. Stage 1 (pre-rip VLC thumbnails from encrypted disc) is a future enhancement. | [~] |
+| C2 | Video Preview/Verification | Two-stage preview system: Stage 2 (post-rip FFmpeg thumbnails from MKV files) is critical for verifying episode-to-title mapping before transcoding. Stage 1 (pre-rip VLC thumbnails from encrypted disc) is a future enhancement. | [x] |
 
 ### C1 - Movie Detection Implementation Plan [COMPLETE ✅]
 - [x] Improve TV vs Movie heuristics (track count, duration patterns, disc structure)
@@ -29,7 +29,7 @@ Extracted from PRD v2.1 (January 18, 2026)
 
 **Solution:** Two-stage preview system that provides visual verification at both pre-rip and pre-transcode stages.
 
-#### Stage 2: Post-Rip Preview (PRIORITY - Implement First) [MOSTLY COMPLETE]
+#### Stage 2: Post-Rip Preview (PRIORITY - Implement First) [COMPLETE]
 **When:** After ripping completes, before user approves transcode
 **Goal:** Detailed visual verification with episode name matching
 **Method:** FFmpeg extracts 4 thumbnails per ripped MKV file
@@ -37,8 +37,8 @@ Extracted from PRD v2.1 (January 18, 2026)
 - [x] Extract thumbnails from ripped MKV files in staging directory
 - [x] Send thumbnails to server with rip completion notification
 - [x] Display 2x2 thumbnail grid in transcode approval modal
-- [ ] Add file renaming capability if episode detection was wrong
-- [ ] Add episode number adjustment UI for TV shows
+- [x] Add file renaming capability if episode detection was wrong
+- [x] Add episode number adjustment UI for TV shows
 - [x] Clean up thumbnails after transcode approval/rejection
 
 **FFmpeg Command:**
@@ -191,9 +191,9 @@ Tracks matching these patterns should be flagged as extras:
 | TA5 | Approval modal with worker/preset selection | P0 | [x] |
 | TA6 | Show file size and source disc name | P1 | [x] |
 | TA7 | Show upload errors for manual retry | P1 | [x] |
-| TA8 | Display 2x2 thumbnail grid per job (Stage 2 preview) | P0 | [ ] |
-| TA9 | Allow file renaming before transcode | P1 | [ ] |
-| TA10 | Allow episode number adjustment (TV shows) | P1 | [ ] |
+| TA8 | Display 2x2 thumbnail grid per job (Stage 2 preview) | P0 | [x] |
+| TA9 | Allow file renaming before transcode | P1 | [x] |
+| TA10 | Allow episode number adjustment (TV shows) | P1 | [x] |
 
 ---
 

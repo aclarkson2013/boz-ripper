@@ -53,6 +53,7 @@ class JobApprovalRequest(BaseModel):
 
     worker_id: str
     preset: str
+    output_name: Optional[str] = None  # TA9/TA10: Allow renaming before transcode
 
 
 class JobUpdate(BaseModel):

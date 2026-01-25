@@ -242,14 +242,23 @@ class JobQueue:
         job_id: str,
         agent_id: str,
         preset: str,
+        output_name: Optional[str] = None,
     ) -> Optional[Job]:
-        """Approve a pending job and assign to an agent."""
+        """Approve a pending job and assign to an agent.
+
+        Args:
+            job_id: Job ID
+            agent_id: Agent ID to assign to
+            preset: Transcoding preset
+            output_name: Optional new output name (TA9/TA10 file renaming)
+        """
         async with await self._get_session() as session:
             repo = JobRepository(session)
-            job = await repo.approve_job(job_id, agent_id, preset)
+            job = await repo.approve_job(job_id, agent_id, preset, output_name)
             if job:
                 await session.commit()
-                logger.info(f"Job {job_id} approved: agent={agent_id}, preset={preset}")
+                rename_note = f", renamed to '{output_name}'" if output_name else ""
+                logger.info(f"Job {job_id} approved: agent={agent_id}, preset={preset}{rename_note}")
             return job
 
     async def update_job_thumbnails(

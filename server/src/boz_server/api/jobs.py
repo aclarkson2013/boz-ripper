@@ -248,8 +248,10 @@ async def approve_job(
     # Workers from agents have an agent_id, standalone workers use worker_id
     agent_id = worker.agent_id or request.worker_id
 
-    # Approve and assign to the agent
-    approved_job = await job_queue.approve_job(job_id, agent_id, request.preset)
+    # Approve and assign to the agent (TA9/TA10: pass output_name if user edited it)
+    approved_job = await job_queue.approve_job(
+        job_id, agent_id, request.preset, request.output_name
+    )
     if not approved_job:
         raise HTTPException(status_code=400, detail="Failed to approve job")
 

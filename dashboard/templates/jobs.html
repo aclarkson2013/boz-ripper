@@ -671,11 +671,17 @@
         body.innerHTML = `
             ${thumbnailHtml}
 
-            <div class="row g-3 mb-4">
-                <div class="col-12">
-                    <label class="text-muted small">Output Name</label>
-                    <div class="fw-medium">${job.output_name || 'Unknown'}</div>
+            <!-- File Naming Section (TA9 & TA10) -->
+            <div class="card bg-dark border-secondary mb-4">
+                <div class="card-header border-secondary">
+                    <h6 class="mb-0"><i class="bi bi-pencil me-2"></i>Output Filename</h6>
                 </div>
+                <div class="card-body">
+                    ${renderFilenameEditor(job)}
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
                 ${job.source_disc_name ? `
                     <div class="col-md-6">
                         <label class="text-muted small">Source Disc</label>
@@ -804,6 +810,7 @@
 
         const selectedWorker = document.querySelector('input[name="worker"]:checked');
         const presetSelect = document.getElementById('preset-select');
+        const outputNameInput = document.getElementById('output-name-input');
 
         if (!selectedWorker) {
             alert('Please select a worker');
@@ -815,18 +822,28 @@
             return;
         }
 
+        // Get the (possibly edited) output name
+        const outputName = outputNameInput?.value?.trim() || null;
+
         const approveBtn = document.getElementById('approve-btn');
         approveBtn.disabled = true;
         approveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting...';
 
         try {
+            const requestBody = {
+                worker_id: selectedWorker.value,
+                preset: presetSelect.value
+            };
+
+            // Include output_name if it was edited (TA9/TA10)
+            if (outputName) {
+                requestBody.output_name = outputName;
+            }
+
             const response = await fetch(`/api/jobs/${currentApprovalJobId}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    worker_id: selectedWorker.value,
-                    preset: presetSelect.value
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.ok) {
@@ -856,6 +873,131 @@
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Parse TV show filename pattern: "Show Name - S01E02 - Episode Title" or "Show Name - S01E02"
+    function parseTVFilename(filename) {
+        const pattern = /^(.+?) - S(\d+)E(\d+)(?: - (.+))?$/;
+        const match = filename.match(pattern);
+        if (match) {
+            return {
+                isTVShow: true,
+                showName: match[1],
+                season: parseInt(match[2]),
+                episode: parseInt(match[3]),
+                episodeTitle: match[4] || ''
+            };
+        }
+        return { isTVShow: false };
+    }
+
+    // Build filename from TV show components
+    function buildTVFilename(showName, season, episode, episodeTitle) {
+        const epCode = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+        if (episodeTitle) {
+            return `${showName} - ${epCode} - ${episodeTitle}`;
+        }
+        return `${showName} - ${epCode}`;
+    }
+
+    // Render filename editor (TA9 & TA10)
+    function renderFilenameEditor(job) {
+        const outputName = job.output_name || 'Unknown';
+        const parsed = parseTVFilename(outputName);
+
+        if (parsed.isTVShow) {
+            // TV Show: Show structured editor with episode adjustment
+            return `
+                <div class="mb-3">
+                    <div class="small text-info mb-2">
+                        <i class="bi bi-tv me-1"></i>TV Show Detected - Adjust episode details if needed
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label small text-muted">Show Name</label>
+                            <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary"
+                                   id="tv-show-name" value="${escapeHtml(parsed.showName)}" onchange="updateTVFilename()">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted">Season</label>
+                            <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary"
+                                   id="tv-season" value="${parsed.season}" min="1" max="99" onchange="updateTVFilename()">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted">Episode</label>
+                            <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary"
+                                   id="tv-episode" value="${parsed.episode}" min="1" max="999" onchange="updateTVFilename()">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted">&nbsp;</label>
+                            <div class="btn-group w-100">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="adjustEpisode(-1)" title="Previous Episode">
+                                    <i class="bi bi-dash"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="adjustEpisode(1)" title="Next Episode">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-muted">Episode Title (optional)</label>
+                            <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary"
+                                   id="tv-episode-title" value="${escapeHtml(parsed.episodeTitle)}"
+                                   placeholder="Leave blank if unknown" onchange="updateTVFilename()">
+                        </div>
+                    </div>
+                    <div class="mt-3 p-2 bg-secondary bg-opacity-25 rounded">
+                        <label class="form-label small text-muted mb-1">Final Filename</label>
+                        <div class="fw-medium text-light" id="final-filename-preview">${escapeHtml(outputName)}</div>
+                    </div>
+                    <input type="hidden" id="output-name-input" value="${escapeHtml(outputName)}">
+                </div>
+            `;
+        } else {
+            // Movie or unknown: Simple text input
+            return `
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Filename (without extension)</label>
+                    <input type="text" class="form-control bg-dark text-light border-secondary"
+                           id="output-name-input" value="${escapeHtml(outputName)}">
+                    <div class="form-text">Edit the filename if the detected title is incorrect</div>
+                </div>
+            `;
+        }
+    }
+
+    // Update TV filename when components change
+    function updateTVFilename() {
+        const showName = document.getElementById('tv-show-name')?.value || '';
+        const season = parseInt(document.getElementById('tv-season')?.value) || 1;
+        const episode = parseInt(document.getElementById('tv-episode')?.value) || 1;
+        const episodeTitle = document.getElementById('tv-episode-title')?.value || '';
+
+        const filename = buildTVFilename(showName, season, episode, episodeTitle);
+
+        const preview = document.getElementById('final-filename-preview');
+        const input = document.getElementById('output-name-input');
+
+        if (preview) preview.textContent = filename;
+        if (input) input.value = filename;
+    }
+
+    // Adjust episode number up or down
+    function adjustEpisode(delta) {
+        const episodeInput = document.getElementById('tv-episode');
+        if (episodeInput) {
+            let value = parseInt(episodeInput.value) || 1;
+            value = Math.max(1, Math.min(999, value + delta));
+            episodeInput.value = value;
+            updateTVFilename();
+        }
+    }
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
     }
 
     // Show fullsize thumbnail in modal
