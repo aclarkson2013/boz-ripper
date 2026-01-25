@@ -26,10 +26,21 @@ except ImportError:
 
 # Configuration
 DASHBOARD_URL = "http://10.0.0.60:5000"
-AGENT_DIR = Path(__file__).parent.parent / "agent"
-REPO_DIR = Path(__file__).parent.parent
-LOG_FILE = Path(__file__).parent / "agent.log"
 CHECK_INTERVAL = 5  # seconds between health checks
+
+# Detect if running as PyInstaller exe or as script
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe - exe is in agent-launcher/dist/
+    LAUNCHER_DIR = Path(sys.executable).parent
+    # Go up from dist/ to agent-launcher/, then up to boz-ripper/
+    REPO_DIR = LAUNCHER_DIR.parent.parent
+else:
+    # Running as script
+    LAUNCHER_DIR = Path(__file__).parent
+    REPO_DIR = LAUNCHER_DIR.parent
+
+AGENT_DIR = REPO_DIR / "agent"
+LOG_FILE = LAUNCHER_DIR / "agent.log"
 
 
 class AgentStatus:
