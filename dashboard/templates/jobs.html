@@ -643,10 +643,12 @@
         const hasVlc = !!vlcWorker;
 
         // Build VLC preview button
+        // Escape backslashes in file path for onclick handler (Windows paths)
+        const escapedFilePath = job.input_file ? job.input_file.replace(/\\/g, '\\\\') : '';
         let vlcButtonHtml = '';
         if (hasVlc) {
             vlcButtonHtml = `
-                <button class="btn btn-outline-info btn-sm" onclick="launchVlcPreview('${job.input_file}', '${vlcWorker.agent_id}')" id="vlc-preview-btn">
+                <button class="btn btn-outline-info btn-sm" onclick="launchVlcPreview('${escapedFilePath}', '${vlcWorker.agent_id}')" id="vlc-preview-btn">
                     <i class="bi bi-play-circle me-1"></i>Preview with VLC
                 </button>
             `;
