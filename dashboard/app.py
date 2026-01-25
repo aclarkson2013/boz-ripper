@@ -5,7 +5,7 @@ from datetime import datetime
 from functools import wraps
 
 import httpx
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "boz-ripper-dashboard-dev-key")
@@ -342,6 +342,32 @@ def api_health():
     """Proxy to health API."""
     health = api_request("GET", "/health")
     return jsonify(health or {"status": "disconnected"})
+
+
+@app.route("/api/thumbnails/<path:filepath>")
+def api_thumbnails(filepath: str):
+    """Proxy thumbnail images from the server.
+
+    Thumbnails are stored on the server and served via its /api/thumbnails endpoint.
+    This route proxies requests to the server to serve them to the browser.
+    """
+    url = f"{API_BASE_URL}/api/thumbnails/{filepath}"
+    try:
+        with httpx.Client(timeout=API_TIMEOUT) as client:
+            response = client.get(url)
+            if response.status_code == 200:
+                return Response(
+                    response.content,
+                    mimetype=response.headers.get("content-type", "image/jpeg"),
+                    headers={
+                        "Cache-Control": "public, max-age=3600",
+                    }
+                )
+            else:
+                return Response("Thumbnail not found", status=404)
+    except httpx.RequestError as e:
+        app.logger.error(f"Failed to fetch thumbnail: {e}")
+        return Response("Failed to fetch thumbnail", status=500)
 
 
 # -----------------------------------------------------------------------------
