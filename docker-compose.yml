@@ -25,6 +25,12 @@ services:
       - BOZ_NAS_HOST=${BOZ_NAS_HOST:-}
       - BOZ_NAS_MOVIE_PATH=${BOZ_NAS_MOVIE_PATH:-Movies}
       - BOZ_NAS_TV_PATH=${BOZ_NAS_TV_PATH:-TV Shows}
+      # Discord notifications (S20)
+      - BOZ_DISCORD_ENABLED=${BOZ_DISCORD_ENABLED:-false}
+      - BOZ_DISCORD_WEBHOOK_URL=${BOZ_DISCORD_WEBHOOK_URL:-}
+      - BOZ_DISCORD_NOTIFY_ON_COMPLETE=${BOZ_DISCORD_NOTIFY_ON_COMPLETE:-true}
+      - BOZ_DISCORD_NOTIFY_ON_FAILURE=${BOZ_DISCORD_NOTIFY_ON_FAILURE:-true}
+      - BOZ_DISCORD_NOTIFY_ON_ORGANIZED=${BOZ_DISCORD_NOTIFY_ON_ORGANIZED:-true}
     volumes:
       # Temp storage for ripped files
       - boz-temp:/data/temp
