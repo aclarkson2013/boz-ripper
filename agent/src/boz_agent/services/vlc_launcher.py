@@ -62,13 +62,18 @@ def launch_vlc(
     cmd.append(file_path)
 
     try:
-        # Launch VLC as detached process
-        # DETACHED_PROCESS = 0x00000008
-        # CREATE_NEW_PROCESS_GROUP = 0x00000200
-        # CREATE_NO_WINDOW flag not used to allow VLC window
+        logger.info(
+            "vlc_launching",
+            vlc_path=vlc_path,
+            file_path=file_path,
+            fullscreen=fullscreen,
+            command=cmd,
+        )
+
+        # Launch VLC as a normal process (not detached) so it shows on screen
+        # Using shell=False and no special creation flags for better compatibility
         process = subprocess.Popen(
             cmd,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
