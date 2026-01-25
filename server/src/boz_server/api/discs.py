@@ -185,12 +185,20 @@ async def approve_preview(
 
     # Apply user edits if provided
     if request and request.title_edits:
-        logger.info(f"Applying user edits to disc {disc_id}")
+        logger.info(f"Applying user edits to disc {disc_id}, received {len(request.title_edits)} titles")
+        # Log received selection state
+        selected_titles = [t for t in request.title_edits if t.selected]
+        logger.info(f"Received {len(selected_titles)} selected titles: {[t.index for t in selected_titles]}")
+
         # Update titles with edits (match by index)
         edit_map = {t.index: t for t in request.title_edits}
+        logger.info(f"Edit map keys (title indices): {list(edit_map.keys())}")
+        logger.info(f"Disc titles indices: {[t.index for t in disc.titles]}")
+
         for title in disc.titles:
             if title.index in edit_map:
                 edited = edit_map[title.index]
+                logger.info(f"Updating title {title.index}: selected={edited.selected}")
                 # Update editable fields
                 title.proposed_filename = edited.proposed_filename
                 title.proposed_path = edited.proposed_path
@@ -198,6 +206,14 @@ async def approve_preview(
                 title.episode_title = edited.episode_title
                 title.is_extra = edited.is_extra
                 title.selected = edited.selected
+            else:
+                logger.warning(f"Title {title.index} not found in edit_map!")
+
+        # Log final selection state before save
+        final_selected = [t for t in disc.titles if t.selected]
+        logger.info(f"After update, {len(final_selected)} titles selected: {[t.index for t in final_selected]}")
+    else:
+        logger.warning(f"No title_edits in request for disc {disc_id}")
 
     # Mark as approved
     disc.preview_status = PreviewStatus.APPROVED
