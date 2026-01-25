@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # Worker settings
     worker_timeout_seconds: int = 90  # Mark worker offline after this
-    worker_assignment_strategy: str = "priority"  # priority, round_robin, load_balance
+    worker_assignment_strategy: str = "priority"  # priority, round_robin, load_balance, fastest_first
     worker_auto_failover: bool = True  # Auto-reassign jobs if worker goes offline
 
     # TheTVDB settings

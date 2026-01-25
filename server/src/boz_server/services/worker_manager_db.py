@@ -70,8 +70,16 @@ class WorkerManager:
 
     async def start(self) -> None:
         """Start the worker manager background tasks."""
+        # S11: Load assignment strategy from config
+        strategy_name = settings.worker_assignment_strategy.lower()
+        try:
+            self._assignment_strategy = AssignmentStrategy(strategy_name)
+        except ValueError:
+            logger.warning(f"Invalid assignment strategy '{strategy_name}', using 'priority'")
+            self._assignment_strategy = AssignmentStrategy.PRIORITY
+
         self._cleanup_task = asyncio.create_task(self._health_check_loop())
-        logger.info("Worker manager started")
+        logger.info(f"Worker manager started (strategy: {self._assignment_strategy.value})")
 
     async def stop(self) -> None:
         """Stop the worker manager."""

@@ -114,7 +114,7 @@ Stage 2 is critical because:
 | S8 | Allow user approval/modification of preview | P0 | [x] |
 | S9 | Maintain registry of all workers | P0 | [x] |
 | S10 | Monitor worker health via heartbeats | P0 | [x] |
-| S11 | Assign transcode jobs based on strategy (priority/round-robin/load-balance) | P0 | [~] |
+| S11 | Assign transcode jobs based on strategy (priority/round-robin/load-balance) | P0 | [x] |
 | S12 | Support worker priorities (1-99) | P0 | [x] |
 | S13 | Handle worker failover automatically | P1 | [x] |
 | S14 | Provide worker management UI | P1 | [x] |
@@ -369,7 +369,7 @@ workers:
 - [x] Migrate TVSeason cache (enables multi-disc across restarts)
 - [x] Update all service layers for database queries
 - [x] Repository layer with Pydantic ↔ ORM conversion
-- [ ] Set up Alembic migrations (Phase 4.1)
+- [x] Set up Alembic migrations (Phase 4.1)
 - [ ] End-to-end testing (REQUIRED BEFORE PRODUCTION)
 
 ### Phase 5: Remote Transcode Mode & File Organization [IN PROGRESS]
