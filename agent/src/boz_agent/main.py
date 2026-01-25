@@ -105,6 +105,11 @@ class Agent:
         """Handle a disc insertion event."""
         logger.info("disc_inserted", drive=drive, disc_info=disc_info)
 
+        # Wait for disc to spin up and settle before analysis
+        # Some discs need time to be ready for MakeMKV to analyze properly
+        logger.debug("waiting_for_disc_ready", drive=drive, delay_seconds=10)
+        await asyncio.sleep(10)
+
         # Analyze disc with MakeMKV
         analysis = await self.makemkv.analyze_disc(drive)
 
