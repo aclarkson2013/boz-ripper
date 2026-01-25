@@ -586,12 +586,30 @@
     // Load disc preview on page load
     document.addEventListener('DOMContentLoaded', loadDiscPreview);
 
-    async function loadDiscPreview() {
+    async function loadDiscPreview(preserveSelections = false) {
         try {
+            // Preserve current selections if requested
+            const savedSelections = {};
+            if (preserveSelections && discData && discData.titles) {
+                discData.titles.forEach(title => {
+                    savedSelections[title.index] = title.selected;
+                });
+            }
+
             const response = await fetch(`/api/discs/${discId}`);
             if (!response.ok) throw new Error('Failed to fetch disc');
 
             discData = await response.json();
+
+            // Restore selections if we saved them
+            if (preserveSelections && Object.keys(savedSelections).length > 0) {
+                discData.titles.forEach(title => {
+                    if (savedSelections.hasOwnProperty(title.index)) {
+                        title.selected = savedSelections[title.index];
+                    }
+                });
+            }
+
             renderPreview();
 
             document.getElementById('loading-state').style.display = 'none';
@@ -828,10 +846,10 @@
             });
             
             if (!response.ok) throw new Error('Failed to update season/episode');
-            
-            // Reload the disc data to show updated episodes
-            await loadDiscPreview();
-            
+
+            // Reload the disc data to show updated episodes, preserving user selections
+            await loadDiscPreview(true);
+
             showToast('Success', `Updated to Season ${season}, Episode ${episode}`, 'success');
         } catch (error) {
             console.error('Error updating season/episode:', error);
@@ -976,9 +994,9 @@
                 throw new Error(error.detail || 'Failed to override media type');
             }
 
-            // Reload the preview with new data
+            // Reload the preview with new data, preserving user selections
             document.getElementById('override-modal').classList.remove('active');
-            await loadDiscPreview();
+            await loadDiscPreview(true);
             showToast('Success', `Changed to ${pendingMediaType === 'tv_show' ? 'TV Show' : 'Movie'}`, 'success');
         } catch (error) {
             console.error('Error overriding media type:', error);

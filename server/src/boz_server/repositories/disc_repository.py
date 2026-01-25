@@ -1,6 +1,5 @@
 """Disc repository for database operations."""
 
-import logging
 from typing import Optional
 
 from sqlalchemy import select
@@ -10,8 +9,6 @@ from sqlalchemy.orm import selectinload
 from ..database.models.disc import DiscORM, TitleORM
 from ..models.disc import Disc, DiscType, MediaType, PreviewStatus, Title
 from .base import BaseRepository
-
-logger = logging.getLogger(__name__)
 
 
 class DiscRepository(BaseRepository[DiscORM]):
@@ -252,10 +249,6 @@ class DiscRepository(BaseRepository[DiscORM]):
         if not disc_orm:
             return None
 
-        logger.info(f"Repository: Updating disc {disc.disc_id}")
-        logger.info(f"Repository: Pydantic titles selected: {[(t.index, t.selected) for t in disc.titles]}")
-        logger.info(f"Repository: ORM titles before update: {[(t.title_index, t.selected) for t in disc_orm.titles]}")
-
         # Update all fields
         disc_orm.disc_name = disc.disc_name
         disc_orm.disc_type = disc.disc_type.value
@@ -280,7 +273,6 @@ class DiscRepository(BaseRepository[DiscORM]):
         for title in disc.titles:
             for title_orm in disc_orm.titles:
                 if title_orm.title_index == title.index:
-                    logger.info(f"Repository: Setting title {title.index} selected={title.selected}")
                     title_orm.name = title.name
                     title_orm.selected = title.selected
                     title_orm.is_extra = title.is_extra
@@ -293,8 +285,6 @@ class DiscRepository(BaseRepository[DiscORM]):
 
         await self.session.flush()
         await self.session.refresh(disc_orm)
-
-        logger.info(f"Repository: ORM titles after update: {[(t.title_index, t.selected) for t in disc_orm.titles]}")
         return self.to_pydantic(disc_orm)
 
     async def get_all_with_titles(self) -> list[Disc]:
