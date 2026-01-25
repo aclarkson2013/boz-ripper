@@ -368,11 +368,11 @@ async def override_media_type(
 
         # Try to fetch episodes from TheTVDB
         if preview_generator.thetvdb_client:
-            series = await preview_generator.thetvdb_client.search_series(request.show_name)
-            if series:
-                disc.thetvdb_series_id = series.get("id")
+            series_id = await preview_generator.thetvdb_client.search_series(request.show_name)
+            if series_id:
+                disc.thetvdb_series_id = series_id
                 episodes = await preview_generator.thetvdb_client.get_season_episodes(
-                    disc.thetvdb_series_id,
+                    series_id,
                     disc.tv_season_number
                 )
                 if episodes:
