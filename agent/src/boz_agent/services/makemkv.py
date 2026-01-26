@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 
 # Timeout constants
 DISC_INDEX_TIMEOUT = 30  # seconds to get disc index
-ANALYZE_TIMEOUT = 180  # seconds to analyze disc (some discs with copy protection take longer)
+ANALYZE_TIMEOUT = 300  # seconds to analyze disc (some discs with copy protection take longer)
 ANALYZE_RETRIES = 3  # number of retry attempts for disc analysis
 ANALYZE_RETRY_DELAY = 5  # seconds to wait between retries
 RIP_TIMEOUT = 7200  # 2 hours max for ripping

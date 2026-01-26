@@ -515,6 +515,21 @@ async def start_rip(
             detail=f"Cannot rip disc with preview status: {disc.preview_status}. Preview must be approved first.",
         )
 
+    # Check for existing rip jobs for this disc to prevent duplicates
+    all_jobs = await job_queue.get_all_jobs()
+    existing_rip_jobs = [
+        j for j in all_jobs
+        if j.job_type == "rip" and j.disc_id == disc_id
+    ]
+    if existing_rip_jobs:
+        logger.warning(f"Rip jobs already exist for disc {disc_id}, returning existing jobs")
+        return {
+            "status": "ok",
+            "jobs_created": 0,
+            "job_ids": [j.job_id for j in existing_rip_jobs],
+            "message": "Rip jobs already exist for this disc",
+        }
+
     # Get title indices from request body
     title_indices = request.title_indices if request else None
 

@@ -55,6 +55,7 @@ class JobRunner:
 
         self._running = False
         self._poll_task: Optional[asyncio.Task] = None
+        self._vlc_poll_task: Optional[asyncio.Task] = None  # Separate task for VLC commands
         self._current_job: Optional[dict] = None
         self._rip_in_progress = False  # Only allow one rip at a time (single drive)
 
@@ -75,6 +76,9 @@ class JobRunner:
             logger.info("job_runner_started", worker_enabled=False)
 
         self._poll_task = asyncio.create_task(self._poll_loop())
+        # Start separate VLC command poll task (runs independently of job execution)
+        if self.vlc_info and self.vlc_info.installed and self.settings.vlc.enabled:
+            self._vlc_poll_task = asyncio.create_task(self._vlc_poll_loop())
 
     async def stop(self) -> None:
         """Stop the job runner."""
@@ -87,18 +91,34 @@ class JobRunner:
             except asyncio.CancelledError:
                 pass
 
+        if self._vlc_poll_task:
+            self._vlc_poll_task.cancel()
+            try:
+                await self._vlc_poll_task
+            except asyncio.CancelledError:
+                pass
+
         if self.worker:
             await self.worker.stop()
 
         logger.info("job_runner_stopped")
 
+    async def _vlc_poll_loop(self) -> None:
+        """Separate poll loop for VLC commands - runs independently of job execution."""
+        while self._running:
+            try:
+                await self._process_vlc_commands()
+                await asyncio.sleep(2)  # Check every 2 seconds for fast response
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug("vlc_poll_error", error=str(e))
+                await asyncio.sleep(5)
+
     async def _poll_loop(self) -> None:
         """Poll for jobs and execute them."""
         while self._running:
             try:
-                # Check for VLC commands (non-blocking, handled first)
-                await self._process_vlc_commands()
-
                 # Get assigned jobs
                 jobs = await self.server_client.get_pending_jobs()
 

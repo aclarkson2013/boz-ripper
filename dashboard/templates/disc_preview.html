@@ -860,7 +860,12 @@
         }
     });
     // Approve button handler
+    let approvalInProgress = false;
     document.getElementById('btn-approve').addEventListener('click', async () => {
+        // Prevent double-click
+        if (approvalInProgress) return;
+        approvalInProgress = true;
+
         const btn = document.getElementById('btn-approve');
         btn.disabled = true;
         btn.innerHTML = '<span class="loading-spinner"></span> Approving...';

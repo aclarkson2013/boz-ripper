@@ -48,6 +48,8 @@ else:
 
 AGENT_DIR = REPO_DIR / "agent"
 LOG_FILE = LAUNCHER_DIR / "agent.log"
+LOG_MAX_SIZE_MB = 10  # Rotate when log exceeds this size
+LOG_BACKUP_COUNT = 2  # Keep this many backup files
 LOCK_FILE = Path(tempfile.gettempdir()) / LOCK_FILE_NAME
 
 
@@ -160,6 +162,40 @@ class SingleInstanceChecker:
             except Exception:
                 pass
             self.locked = False
+
+
+def rotate_logs():
+    """Rotate log file if it exceeds the maximum size."""
+    if not LOG_FILE.exists():
+        return
+
+    try:
+        size_mb = LOG_FILE.stat().st_size / (1024 * 1024)
+        if size_mb < LOG_MAX_SIZE_MB:
+            return
+
+        # Rotate existing backups
+        for i in range(LOG_BACKUP_COUNT - 1, 0, -1):
+            old_backup = LOG_FILE.with_suffix(f".log.{i}")
+            new_backup = LOG_FILE.with_suffix(f".log.{i + 1}")
+            if old_backup.exists():
+                if new_backup.exists():
+                    new_backup.unlink()
+                old_backup.rename(new_backup)
+
+        # Rotate current log to .1
+        backup = LOG_FILE.with_suffix(".log.1")
+        if backup.exists():
+            backup.unlink()
+        LOG_FILE.rename(backup)
+
+        # Delete oldest backup if exceeds count
+        oldest = LOG_FILE.with_suffix(f".log.{LOG_BACKUP_COUNT + 1}")
+        if oldest.exists():
+            oldest.unlink()
+
+    except Exception as e:
+        print(f"Log rotation error: {e}")
 
 
 def find_existing_agent_processes():
@@ -623,6 +659,9 @@ class BozRipperLauncher:
 
     def run(self):
         """Run the system tray application."""
+        # Rotate logs if needed before starting
+        rotate_logs()
+
         self.log("=" * 50)
         self.log("Boz Ripper Agent Launcher starting...")
         self.log(f"Agent directory: {AGENT_DIR}")
